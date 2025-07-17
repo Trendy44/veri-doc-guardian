@@ -2,39 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* VeriDoc Guardian - Professional Document Verification Design System */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Base colors for professional document verification UI */
+    --background: 220 15% 97%;
+    --foreground: 230 25% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 230 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 230 25% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Professional blue for trust and security */
+    --primary: 220 80% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 220 80% 65%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Clean gray for secondary actions */
+    --secondary: 220 10% 93%;
+    --secondary-foreground: 230 25% 25%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted - Subtle backgrounds */
+    --muted: 220 12% 95%;
+    --muted-foreground: 220 8% 46%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Verification success green */
+    --accent: 142 70% 50%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive - Error/warning red */
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Warning - Amber for pending states */
+    --warning: 38 85% 60%;
+    --warning-foreground: 30 25% 15%;
+
+    /* Borders and inputs */
+    --border: 220 13% 86%;
+    --input: 220 13% 91%;
+    --ring: 220 80% 45%;
+
+    /* Security indicator colors */
+    --secure: 142 70% 50%;
+    --pending: 38 85% 60%;
+    --failed: 0 75% 55%;
+
+    /* Professional gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-hero: linear-gradient(135deg, hsl(220 80% 45%) 0%, hsl(220 70% 35%) 50%, hsl(220 60% 25%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(220 15% 98%) 100%);
+    
+    /* Professional shadows */
+    --shadow-card: 0 4px 20px -2px hsl(220 25% 25% / 0.08);
+    --shadow-floating: 0 8px 30px -4px hsl(220 25% 25% / 0.12);
+    --shadow-glow: 0 0 30px hsl(var(--primary) / 0.3);
+
+    /* Smooth animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s ease-out;
 
     --radius: 0.5rem;
 
