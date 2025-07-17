@@ -155,38 +155,92 @@ const VerificationPage = () => {
       if (nameLines.length > 1) data.fatherName = nameLines[1];
       
     } else if (documentType === 'marksheet') {
-      // For marksheet - extract roll number (first number)
-      const rollMatch = lines.find(line => /^\d+$/.test(line.trim()));
-      if (rollMatch) data.rollNumber = rollMatch.trim();
+      // Extract roll number or seat number
+      const rollMatch = text.match(/(?:ROLL\s*NO|SEAT\s*NO|ROLL\s*NUMBER|SEAT\s*NUMBER)[\s:]*(\d+)/i);
+      if (rollMatch) {
+        data.rollNumber = rollMatch[1];
+      } else {
+        // Fallback: look for standalone numbers that could be roll/seat numbers
+        const numMatch = lines.find(line => /^\d{4,8}$/.test(line.trim()));
+        if (numMatch) data.rollNumber = numMatch.trim();
+      }
       
-      // Extract student name (lines with all caps text)
-      const nameLines = lines.filter(line => /^[A-Z\s]+$/.test(line.trim()) && line.length > 3);
+      // Extract student name (lines with all caps text, longer than 5 chars)
+      const nameLines = lines.filter(line => {
+        const cleanLine = line.trim();
+        return /^[A-Z\s]+$/.test(cleanLine) && cleanLine.length > 5 && cleanLine.length < 50;
+      });
       if (nameLines.length > 0) data.studentName = nameLines[0];
       
-      // Extract board/school name (lines with mixed case and common school words)
+      // Extract board/school name
       const schoolLine = lines.find(line => 
-        /(?:VIDYALAYA|SCHOOL|COLLEGE|BOARD|UNIVERSITY|CBSE|ICSE)/i.test(line)
+        /(?:VIDYALAYA|SCHOOL|COLLEGE|BOARD|UNIVERSITY|CBSE|ICSE|KERALA|MAHARASHTRA|UP|BIHAR|WEST BENGAL)/i.test(line)
       );
       if (schoolLine) data.board = schoolLine;
       
-      // Extract year (4-digit year, usually recent)
+      // Extract year from date patterns
       const yearMatch = text.match(/\b(19|20)\d{2}\b/);
       if (yearMatch) data.year = yearMatch[0];
       
-      // Extract marks (2-3 digit numbers that look like marks)
-      const markLines = lines.filter(line => /^\d{2,3}$/.test(line.trim()));
-      if (markLines.length > 0) {
-        data.subjects = `Mathematics: ${markLines[0] || 'N/A'}`;
-        if (markLines.length > 1) data.subjects += `\nScience: ${markLines[1]}`;
-        if (markLines.length > 2) data.subjects += `\nEnglish: ${markLines[2]}`;
-        if (markLines.length > 3) data.subjects += `\nSocial Studies: ${markLines[3]}`;
-        if (markLines.length > 4) data.subjects += `\nHindi: ${markLines[4]}`;
-        if (markLines.length > 5) data.subjects += `\nSanskrit: ${markLines[5]}`;
+      // Dynamic subject and marks extraction
+      const subjectKeywords = /(?:MATHEMATICS|MATHS|ENGLISH|PHYSICS|CHEMISTRY|COMPUTER|BIOLOGY|HINDI|SANSKRIT|SOCIAL|SCIENCE|PRACTICAL|THEORY)/i;
+      const subjectsData: Array<{subject: string, marks: string}> = [];
+      
+      // Look for subject-mark patterns in the text
+      const subjectLines = text.split('\n').filter(line => subjectKeywords.test(line));
+      
+      for (const line of subjectLines) {
+        // Extract subject name
+        const subjectMatch = line.match(/([A-Z\s]+(?:PRACTICAL|THEORY)?)/i);
+        if (subjectMatch) {
+          const subject = subjectMatch[1].trim();
+          
+          // Look for marks in the same line or nearby lines
+          const marksInLine = line.match(/\b(\d{2,3})\b/g);
+          if (marksInLine) {
+            // Filter out likely non-mark numbers (like years, codes)
+            const validMarks = marksInLine.filter(mark => {
+              const num = parseInt(mark);
+              return num >= 0 && num <= 100;
+            });
+            
+            if (validMarks.length > 0) {
+              subjectsData.push({subject, marks: validMarks[0]});
+            }
+          }
+        }
+      }
+      
+      // If dynamic extraction didn't work well, try pattern-based extraction
+      if (subjectsData.length === 0) {
+        // Look for patterns like "013", "050", "093" which are common mark patterns
+        const markPattern = /\b(\d{2,3})\b/g;
+        const allMarks = [...text.matchAll(markPattern)]
+          .map(match => match[1])
+          .filter(mark => {
+            const num = parseInt(mark);
+            return num >= 0 && num <= 100;
+          });
         
-        // Calculate percentage if we have marks
-        const totalMarks = markLines.slice(0, 6).reduce((sum, mark) => sum + parseInt(mark), 0);
-        const avgMarks = totalMarks / Math.min(markLines.length, 6);
-        data.percentage = `${avgMarks.toFixed(1)}%`;
+        // Try to match with common subjects if we have marks
+        const commonSubjects = ['English', 'Mathematics', 'Physics', 'Chemistry', 'Computer', 'Biology'];
+        allMarks.slice(0, Math.min(allMarks.length, 6)).forEach((mark, index) => {
+          if (index < commonSubjects.length) {
+            subjectsData.push({subject: commonSubjects[index], marks: mark});
+          }
+        });
+      }
+      
+      // Format subjects string
+      if (subjectsData.length > 0) {
+        data.subjects = subjectsData.map(item => `${item.subject}: ${item.marks}`).join('\n');
+        
+        // Calculate percentage from actual marks
+        const totalObtained = subjectsData.reduce((sum, item) => sum + parseInt(item.marks), 0);
+        const maxMarksPerSubject = 100; // Assuming 100 max marks per subject
+        const totalMaxMarks = subjectsData.length * maxMarksPerSubject;
+        const percentage = (totalObtained / totalMaxMarks) * 100;
+        data.percentage = `${percentage.toFixed(1)}%`;
       }
     }
     
