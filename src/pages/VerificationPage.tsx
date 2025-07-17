@@ -155,92 +155,161 @@ const VerificationPage = () => {
       if (nameLines.length > 1) data.fatherName = nameLines[1];
       
     } else if (documentType === 'marksheet') {
-      // Extract roll number or seat number
-      const rollMatch = text.match(/(?:ROLL\s*NO|SEAT\s*NO|ROLL\s*NUMBER|SEAT\s*NUMBER)[\s:]*(\d+)/i);
-      if (rollMatch) {
-        data.rollNumber = rollMatch[1];
-      } else {
-        // Fallback: look for standalone numbers that could be roll/seat numbers
-        const numMatch = lines.find(line => /^\d{4,8}$/.test(line.trim()));
-        if (numMatch) data.rollNumber = numMatch.trim();
+      // Extract roll number - look for specific roll number patterns, avoid centre/school numbers
+      let rollNumber = '';
+      const rollPatterns = [
+        /(?:ROLL\s*NO|SEAT\s*NO|ROLL\s*NUMBER|SEAT\s*NUMBER)[\s:]*(\d+)/i,
+        /(?:STUDENT\s*ID|ID\s*NO)[\s:]*(\d+)/i
+      ];
+      
+      for (const pattern of rollPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          rollNumber = match[1];
+          break;
+        }
       }
       
-      // Extract student name (lines with all caps text, longer than 5 chars)
-      const nameLines = lines.filter(line => {
-        const cleanLine = line.trim();
-        return /^[A-Z\s]+$/.test(cleanLine) && cleanLine.length > 5 && cleanLine.length < 50;
-      });
-      if (nameLines.length > 0) data.studentName = nameLines[0];
+      // If no labeled roll number found, look for standalone numbers that aren't centre numbers
+      if (!rollNumber) {
+        const allNumbers = text.match(/\b\d{4,8}\b/g) || [];
+        // Avoid centre numbers (usually very large) and focus on likely roll numbers
+        const candidateRolls = allNumbers.filter(num => {
+          const n = parseInt(num);
+          return n >= 1000 && n <= 999999 && !text.includes(`CENTRE: ${num}`) && !text.includes(`CENTER: ${num}`);
+        });
+        if (candidateRolls.length > 0) rollNumber = candidateRolls[0];
+      }
+      if (rollNumber) data.rollNumber = rollNumber;
       
-      // Extract board/school name
-      const schoolLine = lines.find(line => 
-        /(?:VIDYALAYA|SCHOOL|COLLEGE|BOARD|UNIVERSITY|CBSE|ICSE|KERALA|MAHARASHTRA|UP|BIHAR|WEST BENGAL)/i.test(line)
+      // Extract student name - look for name in caps after roll number section
+      const nameMatch = text.match(/(?:NAME|STUDENT)[\s:]*([A-Z\s]{10,50})/i);
+      if (nameMatch) {
+        data.studentName = nameMatch[1].trim();
+      } else {
+        // Fallback: look for long capitalized text that could be names
+        const nameLines = lines.filter(line => {
+          const cleanLine = line.trim();
+          return /^[A-Z\s]+$/.test(cleanLine) && cleanLine.length > 8 && cleanLine.length < 50 && 
+                 !cleanLine.includes('BOARD') && !cleanLine.includes('UNIVERSITY');
+        });
+        if (nameLines.length > 0) data.studentName = nameLines[0];
+      }
+      
+      // Extract board/school - look at top lines for board info
+      const topLines = lines.slice(0, 5);
+      const boardLine = topLines.find(line => 
+        /(?:BOARD|UNIVERSITY|CBSE|ICSE|STATE|KERALA|MAHARASHTRA|UP|BIHAR|WEST BENGAL|GUJARAT|RAJASTHAN)/i.test(line)
+      ) || lines.find(line => 
+        /(?:VIDYALAYA|SCHOOL|COLLEGE|BOARD|UNIVERSITY)/i.test(line)
       );
-      if (schoolLine) data.board = schoolLine;
+      if (boardLine) data.board = boardLine.trim();
       
       // Extract year from date patterns
       const yearMatch = text.match(/\b(19|20)\d{2}\b/);
       if (yearMatch) data.year = yearMatch[0];
       
-      // Dynamic subject and marks extraction
-      const subjectKeywords = /(?:MATHEMATICS|MATHS|ENGLISH|PHYSICS|CHEMISTRY|COMPUTER|BIOLOGY|HINDI|SANSKRIT|SOCIAL|SCIENCE|PRACTICAL|THEORY)/i;
-      const subjectsData: Array<{subject: string, marks: string}> = [];
+      // Look for total marks pattern like "410/500"
+      const totalMarksMatch = text.match(/(\d{2,3})\/(\d{2,3})/);
+      let totalObtained = 0;
+      let totalMaximum = 0;
       
-      // Look for subject-mark patterns in the text
-      const subjectLines = text.split('\n').filter(line => subjectKeywords.test(line));
+      if (totalMarksMatch) {
+        totalObtained = parseInt(totalMarksMatch[1]);
+        totalMaximum = parseInt(totalMarksMatch[2]);
+      }
       
-      for (const line of subjectLines) {
+      // Parse table structure: Subject | Total Marks | Marks Obtained | Marks in Words
+      const subjectsData: Array<{subject: string, totalMarks: string, obtained: string}> = [];
+      
+      // Common subject patterns
+      const subjectPatterns = [
+        /ENGLISH/i, /MATHEMATICS|MATHS/i, /PHYSICS/i, /CHEMISTRY/i, 
+        /COMPUTER/i, /BIOLOGY/i, /HINDI/i, /SANSKRIT/i, /SOCIAL/i,
+        /PRACTICAL/i, /THEORY/i, /SCIENCE/i
+      ];
+      
+      // Try to find table-like structure
+      const tableLines = lines.filter(line => {
+        // Look for lines that might contain subject and marks
+        const hasSubject = subjectPatterns.some(pattern => pattern.test(line));
+        const hasNumbers = /\d{2,3}/.test(line);
+        return hasSubject && hasNumbers;
+      });
+      
+      for (const line of tableLines) {
         // Extract subject name
-        const subjectMatch = line.match(/([A-Z\s]+(?:PRACTICAL|THEORY)?)/i);
-        if (subjectMatch) {
-          const subject = subjectMatch[1].trim();
+        let subject = '';
+        for (const pattern of subjectPatterns) {
+          const match = line.match(pattern);
+          if (match) {
+            subject = match[0];
+            break;
+          }
+        }
+        
+        if (subject) {
+          // Extract all numbers from the line
+          const numbers = line.match(/\b\d{2,3}\b/g) || [];
           
-          // Look for marks in the same line or nearby lines
-          const marksInLine = line.match(/\b(\d{2,3})\b/g);
-          if (marksInLine) {
-            // Filter out likely non-mark numbers (like years, codes)
-            const validMarks = marksInLine.filter(mark => {
-              const num = parseInt(mark);
-              return num >= 0 && num <= 100;
-            });
+          if (numbers.length >= 2) {
+            // Assuming: [subject code], [total marks], [obtained marks], ...
+            // We want the third column (index 2) as marks obtained based on user description
+            const obtained = numbers.length >= 3 ? numbers[2] : numbers[1];
+            const totalMarks = numbers.length >= 2 ? numbers[1] : '100';
             
-            if (validMarks.length > 0) {
-              subjectsData.push({subject, marks: validMarks[0]});
+            subjectsData.push({
+              subject: subject,
+              totalMarks: totalMarks,
+              obtained: obtained
+            });
+          }
+        }
+      }
+      
+      // If table parsing didn't work well, try alternative approach
+      if (subjectsData.length === 0) {
+        // Look for subject lines and nearby marks
+        for (const pattern of subjectPatterns) {
+          const subjectLines = lines.filter(line => pattern.test(line));
+          
+          for (const subjectLine of subjectLines) {
+            const subject = subjectLine.match(pattern)?.[0] || '';
+            const numbers = subjectLine.match(/\b\d{2,3}\b/g) || [];
+            
+            if (numbers.length > 0) {
+              // Take the highest reasonable number as obtained marks
+              const validMarks = numbers.filter(n => parseInt(n) <= 100);
+              if (validMarks.length > 0) {
+                subjectsData.push({
+                  subject: subject,
+                  totalMarks: '100',
+                  obtained: validMarks[0]
+                });
+              }
             }
           }
         }
       }
       
-      // If dynamic extraction didn't work well, try pattern-based extraction
-      if (subjectsData.length === 0) {
-        // Look for patterns like "013", "050", "093" which are common mark patterns
-        const markPattern = /\b(\d{2,3})\b/g;
-        const allMarks = [...text.matchAll(markPattern)]
-          .map(match => match[1])
-          .filter(mark => {
-            const num = parseInt(mark);
-            return num >= 0 && num <= 100;
-          });
-        
-        // Try to match with common subjects if we have marks
-        const commonSubjects = ['English', 'Mathematics', 'Physics', 'Chemistry', 'Computer', 'Biology'];
-        allMarks.slice(0, Math.min(allMarks.length, 6)).forEach((mark, index) => {
-          if (index < commonSubjects.length) {
-            subjectsData.push({subject: commonSubjects[index], marks: mark});
-          }
-        });
-      }
-      
       // Format subjects string
       if (subjectsData.length > 0) {
-        data.subjects = subjectsData.map(item => `${item.subject}: ${item.marks}`).join('\n');
+        data.subjects = subjectsData.map(item => `${item.subject}: ${item.obtained}/${item.totalMarks}`).join('\n');
         
-        // Calculate percentage from actual marks
-        const totalObtained = subjectsData.reduce((sum, item) => sum + parseInt(item.marks), 0);
-        const maxMarksPerSubject = 100; // Assuming 100 max marks per subject
-        const totalMaxMarks = subjectsData.length * maxMarksPerSubject;
-        const percentage = (totalObtained / totalMaxMarks) * 100;
-        data.percentage = `${percentage.toFixed(1)}%`;
+        // Calculate percentage
+        if (totalObtained && totalMaximum) {
+          // Use the total marks pattern if found
+          const percentage = (totalObtained / totalMaximum) * 100;
+          data.percentage = `${percentage.toFixed(1)}%`;
+        } else {
+          // Calculate from individual subjects
+          const obtained = subjectsData.reduce((sum, item) => sum + parseInt(item.obtained), 0);
+          const maximum = subjectsData.reduce((sum, item) => sum + parseInt(item.totalMarks), 0);
+          if (maximum > 0) {
+            const percentage = (obtained / maximum) * 100;
+            data.percentage = `${percentage.toFixed(1)}%`;
+          }
+        }
       }
     }
     
