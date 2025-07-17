@@ -141,10 +141,32 @@ Return ONLY a valid JSON object:
     });
 
     const data = await response.json();
+    console.log('Gemini API response status:', response.status);
+    console.log('Gemini API response data:', data);
+
+    // Check if the API returned an error
+    if (!response.ok || data.error) {
+      console.error('Gemini API error:', data.error || 'Unknown error');
+      return new Response(JSON.stringify({ 
+        error: 'Gemini API Error',
+        details: data.error?.message || `API request failed with status ${response.status}. Please try again in a few moments.`
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!generatedText) {
-      throw new Error('No response from Gemini');
+      console.error('No generated text in response:', data);
+      return new Response(JSON.stringify({ 
+        error: 'No response from Gemini',
+        details: 'Gemini did not generate any text. Please try again.'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     console.log('Gemini response:', generatedText);
@@ -159,7 +181,13 @@ Return ONLY a valid JSON object:
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
       console.error('Raw response:', generatedText);
-      throw new Error('Failed to parse Gemini response as JSON');
+      return new Response(JSON.stringify({ 
+        error: 'Failed to parse AI response',
+        details: 'The AI response could not be parsed. Please try again.'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     return new Response(JSON.stringify(parsedData), {

@@ -157,12 +157,23 @@ const VerificationPage = () => {
         return;
       }
 
+      // Check if the response contains an error (API overloaded, etc.)
+      if (data?.error) {
+        console.error('Gemini API error:', data);
+        toast({
+          title: "AI Service Temporarily Unavailable",
+          description: data.details || "The AI service is currently overloaded. Please try again in a few moments.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       console.log("AI parsed document data:", data);
       setDocumentData(data);
       
       toast({
-        title: "Document Parsed",
-        description: "Form fields have been populated automatically using AI.",
+        title: "Document Parsed Successfully",
+        description: `Extracted: ${data?.studentName || 'Student'} - ${data?.class || 'Class'} - ${data?.percentage || '0'}% marks`,
       });
       
     } catch (error) {
