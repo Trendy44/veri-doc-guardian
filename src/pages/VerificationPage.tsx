@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromImage, extractTextFromPDF, verifyDocument } from "@/lib/verification";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DocumentData {
   [key: string]: string;
@@ -126,195 +127,43 @@ const VerificationPage = () => {
     }
   }, []);
 
-  const parseExtractedText = (text: string) => {
-    console.log("Parsing extracted text:", text);
-    const data: DocumentData = {};
-    const lines = text.split('\n').filter(line => line.trim());
+  const parseExtractedText = async (text: string) => {
+    console.log("Using AI to parse extracted text:", text);
     
-    if (documentType === 'aadhar') {
-      // Look for Aadhar number pattern
-      const aadharMatch = text.match(/\b\d{4}\s?\d{4}\s?\d{4}\b/);
-      if (aadharMatch) data.aadharNumber = aadharMatch[0];
-      
-      // Look for DOB pattern
-      const dobMatch = text.match(/\b\d{2}[-\/]\d{2}[-\/]\d{4}\b/);
-      if (dobMatch) data.dateOfBirth = dobMatch[0];
-      
-      // Extract names - typically the first text lines after numbers
-      const nameLines = lines.filter(line => /^[A-Z\s]+$/.test(line.trim()));
-      if (nameLines.length > 0) data.name = nameLines[0];
-      
-    } else if (documentType === 'pan') {
-      // Look for PAN pattern
-      const panMatch = text.match(/\b[A-Z]{5}\d{4}[A-Z]\b/);
-      if (panMatch) data.panNumber = panMatch[0];
-      
-      // Extract names
-      const nameLines = lines.filter(line => /^[A-Z\s]+$/.test(line.trim()));
-      if (nameLines.length > 0) data.name = nameLines[0];
-      if (nameLines.length > 1) data.fatherName = nameLines[1];
-      
-    } else if (documentType === 'marksheet') {
-      // Extract roll number - look for specific roll number patterns, avoid centre/school numbers
-      let rollNumber = '';
-      const rollPatterns = [
-        /(?:ROLL\s*NO|SEAT\s*NO|ROLL\s*NUMBER|SEAT\s*NUMBER)[\s:]*(\d+)/i,
-        /(?:STUDENT\s*ID|ID\s*NO)[\s:]*(\d+)/i
-      ];
-      
-      for (const pattern of rollPatterns) {
-        const match = text.match(pattern);
-        if (match) {
-          rollNumber = match[1];
-          break;
+    try {
+      const { data, error } = await supabase.functions.invoke('parse-marksheet', {
+        body: {
+          extractedText: text,
+          documentType: documentType
         }
-      }
-      
-      // If no labeled roll number found, look for standalone numbers that aren't centre numbers
-      if (!rollNumber) {
-        const allNumbers = text.match(/\b\d{4,8}\b/g) || [];
-        // Avoid centre numbers (usually very large) and focus on likely roll numbers
-        const candidateRolls = allNumbers.filter(num => {
-          const n = parseInt(num);
-          return n >= 1000 && n <= 999999 && !text.includes(`CENTRE: ${num}`) && !text.includes(`CENTER: ${num}`);
+      });
+
+      if (error) {
+        console.error('AI parsing error:', error);
+        toast({
+          title: "Parsing Error",
+          description: "Failed to parse document with AI. Please fill the form manually.",
+          variant: "destructive",
         });
-        if (candidateRolls.length > 0) rollNumber = candidateRolls[0];
+        return;
       }
-      if (rollNumber) data.rollNumber = rollNumber;
+
+      console.log("AI parsed document data:", data);
+      setDocumentData(data);
       
-      // Extract student name - look for name in caps after roll number section
-      const nameMatch = text.match(/(?:NAME|STUDENT)[\s:]*([A-Z\s]{10,50})/i);
-      if (nameMatch) {
-        data.studentName = nameMatch[1].trim();
-      } else {
-        // Fallback: look for long capitalized text that could be names
-        const nameLines = lines.filter(line => {
-          const cleanLine = line.trim();
-          return /^[A-Z\s]+$/.test(cleanLine) && cleanLine.length > 8 && cleanLine.length < 50 && 
-                 !cleanLine.includes('BOARD') && !cleanLine.includes('UNIVERSITY');
-        });
-        if (nameLines.length > 0) data.studentName = nameLines[0];
-      }
-      
-      // Extract board/school - look at top lines for board info
-      const topLines = lines.slice(0, 5);
-      const boardLine = topLines.find(line => 
-        /(?:BOARD|UNIVERSITY|CBSE|ICSE|STATE|KERALA|MAHARASHTRA|UP|BIHAR|WEST BENGAL|GUJARAT|RAJASTHAN)/i.test(line)
-      ) || lines.find(line => 
-        /(?:VIDYALAYA|SCHOOL|COLLEGE|BOARD|UNIVERSITY)/i.test(line)
-      );
-      if (boardLine) data.board = boardLine.trim();
-      
-      // Extract year from date patterns
-      const yearMatch = text.match(/\b(19|20)\d{2}\b/);
-      if (yearMatch) data.year = yearMatch[0];
-      
-      // Look for total marks pattern like "410/500"
-      const totalMarksMatch = text.match(/(\d{2,3})\/(\d{2,3})/);
-      let totalObtained = 0;
-      let totalMaximum = 0;
-      
-      if (totalMarksMatch) {
-        totalObtained = parseInt(totalMarksMatch[1]);
-        totalMaximum = parseInt(totalMarksMatch[2]);
-      }
-      
-      // Parse table structure: Subject | Total Marks | Marks Obtained | Marks in Words
-      const subjectsData: Array<{subject: string, totalMarks: string, obtained: string}> = [];
-      
-      // Common subject patterns
-      const subjectPatterns = [
-        /ENGLISH/i, /MATHEMATICS|MATHS/i, /PHYSICS/i, /CHEMISTRY/i, 
-        /COMPUTER/i, /BIOLOGY/i, /HINDI/i, /SANSKRIT/i, /SOCIAL/i,
-        /PRACTICAL/i, /THEORY/i, /SCIENCE/i
-      ];
-      
-      // Try to find table-like structure
-      const tableLines = lines.filter(line => {
-        // Look for lines that might contain subject and marks
-        const hasSubject = subjectPatterns.some(pattern => pattern.test(line));
-        const hasNumbers = /\d{2,3}/.test(line);
-        return hasSubject && hasNumbers;
+      toast({
+        title: "Document Parsed",
+        description: "Form fields have been populated automatically using AI.",
       });
       
-      for (const line of tableLines) {
-        // Extract subject name
-        let subject = '';
-        for (const pattern of subjectPatterns) {
-          const match = line.match(pattern);
-          if (match) {
-            subject = match[0];
-            break;
-          }
-        }
-        
-        if (subject) {
-          // Extract all numbers from the line
-          const numbers = line.match(/\b\d{2,3}\b/g) || [];
-          
-          if (numbers.length >= 2) {
-            // Assuming: [subject code], [total marks], [obtained marks], ...
-            // We want the third column (index 2) as marks obtained based on user description
-            const obtained = numbers.length >= 3 ? numbers[2] : numbers[1];
-            const totalMarks = numbers.length >= 2 ? numbers[1] : '100';
-            
-            subjectsData.push({
-              subject: subject,
-              totalMarks: totalMarks,
-              obtained: obtained
-            });
-          }
-        }
-      }
-      
-      // If table parsing didn't work well, try alternative approach
-      if (subjectsData.length === 0) {
-        // Look for subject lines and nearby marks
-        for (const pattern of subjectPatterns) {
-          const subjectLines = lines.filter(line => pattern.test(line));
-          
-          for (const subjectLine of subjectLines) {
-            const subject = subjectLine.match(pattern)?.[0] || '';
-            const numbers = subjectLine.match(/\b\d{2,3}\b/g) || [];
-            
-            if (numbers.length > 0) {
-              // Take the highest reasonable number as obtained marks
-              const validMarks = numbers.filter(n => parseInt(n) <= 100);
-              if (validMarks.length > 0) {
-                subjectsData.push({
-                  subject: subject,
-                  totalMarks: '100',
-                  obtained: validMarks[0]
-                });
-              }
-            }
-          }
-        }
-      }
-      
-      // Format subjects string
-      if (subjectsData.length > 0) {
-        data.subjects = subjectsData.map(item => `${item.subject}: ${item.obtained}/${item.totalMarks}`).join('\n');
-        
-        // Calculate percentage
-        if (totalObtained && totalMaximum) {
-          // Use the total marks pattern if found
-          const percentage = (totalObtained / totalMaximum) * 100;
-          data.percentage = `${percentage.toFixed(1)}%`;
-        } else {
-          // Calculate from individual subjects
-          const obtained = subjectsData.reduce((sum, item) => sum + parseInt(item.obtained), 0);
-          const maximum = subjectsData.reduce((sum, item) => sum + parseInt(item.totalMarks), 0);
-          if (maximum > 0) {
-            const percentage = (obtained / maximum) * 100;
-            data.percentage = `${percentage.toFixed(1)}%`;
-          }
-        }
-      }
+    } catch (error) {
+      console.error('Error calling AI parser:', error);
+      toast({
+        title: "AI Parsing Failed",
+        description: "Please fill the form manually.",
+        variant: "destructive",
+      });
     }
-    
-    console.log("Parsed document data:", data);
-    setDocumentData(data);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
