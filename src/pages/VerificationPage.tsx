@@ -127,8 +127,9 @@ const VerificationPage = () => {
   }, []);
 
   const parseExtractedText = (text: string) => {
-    // Simple parsing logic - can be enhanced based on document structure
+    console.log("Parsing extracted text:", text);
     const data: DocumentData = {};
+    const lines = text.split('\n').filter(line => line.trim());
     
     if (documentType === 'aadhar') {
       // Look for Aadhar number pattern
@@ -136,14 +137,60 @@ const VerificationPage = () => {
       if (aadharMatch) data.aadharNumber = aadharMatch[0];
       
       // Look for DOB pattern
-      const dobMatch = text.match(/\b\d{2}\/\d{2}\/\d{4}\b/);
+      const dobMatch = text.match(/\b\d{2}[-\/]\d{2}[-\/]\d{4}\b/);
       if (dobMatch) data.dateOfBirth = dobMatch[0];
+      
+      // Extract names - typically the first text lines after numbers
+      const nameLines = lines.filter(line => /^[A-Z\s]+$/.test(line.trim()));
+      if (nameLines.length > 0) data.name = nameLines[0];
+      
     } else if (documentType === 'pan') {
       // Look for PAN pattern
       const panMatch = text.match(/\b[A-Z]{5}\d{4}[A-Z]\b/);
       if (panMatch) data.panNumber = panMatch[0];
+      
+      // Extract names
+      const nameLines = lines.filter(line => /^[A-Z\s]+$/.test(line.trim()));
+      if (nameLines.length > 0) data.name = nameLines[0];
+      if (nameLines.length > 1) data.fatherName = nameLines[1];
+      
+    } else if (documentType === 'marksheet') {
+      // For marksheet - extract roll number (first number)
+      const rollMatch = lines.find(line => /^\d+$/.test(line.trim()));
+      if (rollMatch) data.rollNumber = rollMatch.trim();
+      
+      // Extract student name (lines with all caps text)
+      const nameLines = lines.filter(line => /^[A-Z\s]+$/.test(line.trim()) && line.length > 3);
+      if (nameLines.length > 0) data.studentName = nameLines[0];
+      
+      // Extract board/school name (lines with mixed case and common school words)
+      const schoolLine = lines.find(line => 
+        /(?:VIDYALAYA|SCHOOL|COLLEGE|BOARD|UNIVERSITY|CBSE|ICSE)/i.test(line)
+      );
+      if (schoolLine) data.board = schoolLine;
+      
+      // Extract year (4-digit year, usually recent)
+      const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+      if (yearMatch) data.year = yearMatch[0];
+      
+      // Extract marks (2-3 digit numbers that look like marks)
+      const markLines = lines.filter(line => /^\d{2,3}$/.test(line.trim()));
+      if (markLines.length > 0) {
+        data.subjects = `Mathematics: ${markLines[0] || 'N/A'}`;
+        if (markLines.length > 1) data.subjects += `\nScience: ${markLines[1]}`;
+        if (markLines.length > 2) data.subjects += `\nEnglish: ${markLines[2]}`;
+        if (markLines.length > 3) data.subjects += `\nSocial Studies: ${markLines[3]}`;
+        if (markLines.length > 4) data.subjects += `\nHindi: ${markLines[4]}`;
+        if (markLines.length > 5) data.subjects += `\nSanskrit: ${markLines[5]}`;
+        
+        // Calculate percentage if we have marks
+        const totalMarks = markLines.slice(0, 6).reduce((sum, mark) => sum + parseInt(mark), 0);
+        const avgMarks = totalMarks / Math.min(markLines.length, 6);
+        data.percentage = `${avgMarks.toFixed(1)}%`;
+      }
     }
     
+    console.log("Parsed document data:", data);
     setDocumentData(data);
   };
 
