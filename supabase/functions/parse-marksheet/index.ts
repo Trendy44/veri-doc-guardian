@@ -41,7 +41,7 @@ serve(async (req) => {
     
     if (documentType === 'marksheet') {
       prompt = `
-You are an AI that specializes in parsing Indian academic marksheets. Analyze the following extracted text from a marksheet and identify the key information. The text may contain OCR errors, so be intelligent about inferring the correct values.
+You are an AI that specializes in parsing CBSE and other Indian academic marksheets. Analyze the following extracted text from a marksheet and identify the key information. The text may contain OCR errors, so be intelligent about inferring the correct values.
 
 EXTRACTED TEXT:
 ${extractedText}
@@ -52,25 +52,44 @@ Please extract and return ONLY a valid JSON object with the following structure:
   "studentName": "full student name",
   "board": "board/university/school name",
   "year": "year of examination (4 digits)",
-  "subjects": "subject1: marks1/total1\\nsubject2: marks2/total2\\n...",
-  "percentage": "calculated percentage based on marks (e.g., 85.5%)"
+  "class": "10th/Xth or 12th/XIIth - identify the class level",
+  "subjects": "subject1: theory_marks + practical_marks = total_marks\\nsubject2: theory_marks + practical_marks = total_marks\\n...",
+  "percentage": "calculated percentage based on total marks obtained / total possible marks * 100"
 }
 
-IMPORTANT PARSING RULES:
-1. Roll/Seat Number: Look for "ROLL NO", "SEAT NO", or similar labels. Avoid centre numbers which are usually larger.
-2. Student Name: Usually in ALL CAPS, typically appears after roll number
-3. Board: Often at the top, contains words like BOARD, UNIVERSITY, CBSE, ICSE, STATE
-4. Year: 4-digit year, usually recent (2015-2025)
-5. Subjects & Marks: Look for subject names (English, Mathematics, Physics, Chemistry, etc.) followed by marks
-6. Calculate percentage as: (total marks obtained / total maximum marks) * 100
+CRITICAL CBSE MARKSHEET PARSING RULES:
 
-If marksheet appears to be in a table format, the typical structure is:
-- Column 1: Subject name
-- Column 2: Maximum marks
-- Column 3: Marks obtained
-- Column 4: Marks in words
+1. CLASS IDENTIFICATION:
+   - Look for "SECONDARY" or "CLASS X" or "10th" = Class 10th/Xth
+   - Look for "SENIOR SECONDARY" or "CLASS XII" or "12th" = Class 12th/XIIth
 
-Look for patterns like "410/500" which indicate total obtained/total maximum marks.
+2. ROLL NUMBER: Look for "ROLL NO", "SEAT NO" - avoid centre numbers (usually larger)
+
+3. CBSE TABLE STRUCTURE (typical columns left to right):
+   - Column 1: Subject name (MATHEMATICS, PHYSICS, CHEMISTRY, etc.)
+   - Column 2: Theory marks obtained
+   - Column 3: Practical marks obtained (shows "XXX" or similar if no practical)
+   - Column 4: Total marks obtained (theory + practical)
+   - Column 5: Total marks in words (ignore this, use column 4)
+
+4. MARKS EXTRACTION:
+   - Extract theory and practical marks separately
+   - If practical shows "XXX" or similar, treat as 0 practical marks
+   - Total for each subject = theory + practical marks
+   - Assume each subject is out of 100 marks total
+   - IGNORE subjects without actual marks like: WORK EXPERIENCE, PHYSICAL EDUCATION, PHY & HEALTH EDUCA, GENERAL STUDIES
+
+5. PERCENTAGE CALCULATION:
+   - Only count subjects that have actual marks (not XXX or blank)
+   - Total obtained = sum of all valid subject totals
+   - Total possible = number of valid subjects × 100
+   - Percentage = (total obtained / total possible) × 100
+
+6. SUBJECT FORMAT:
+   For each valid subject, format as: "SUBJECT_NAME: theory_marks + practical_marks = total_marks"
+   Example: "MATHEMATICS: 85 + 0 = 85\\nPHYSICS: 78 + 22 = 100"
+
+IMPORTANT: Only include subjects that have actual numerical marks. Skip subjects with no marks or marked as XXX.
 
 Return ONLY the JSON object, no additional text.`;
     } else if (documentType === 'aadhar') {
