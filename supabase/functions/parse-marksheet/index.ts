@@ -12,10 +12,29 @@ serve(async (req) => {
 
   try {
     const { extractedText, documentType } = await req.json();
+    console.log('Received request:', { documentType, textLength: extractedText?.length });
+    
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
     if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY not configured');
+      console.error('GEMINI_API_KEY not found in environment');
+      return new Response(JSON.stringify({ 
+        error: 'GEMINI_API_KEY not configured',
+        details: 'API key is missing from environment variables'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!extractedText || !extractedText.trim()) {
+      return new Response(JSON.stringify({ 
+        error: 'No text provided',
+        details: 'extractedText parameter is empty or missing'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     let prompt = '';

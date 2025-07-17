@@ -89,6 +89,8 @@ const VerificationPage = () => {
     try {
       let extractedText = "";
       
+      console.log('Processing file:', file.name, 'Type:', file.type, 'Size:', file.size);
+      
       if (file.type.startsWith('image/')) {
         setProcessingStep("Extracting text from image...");
         setProgress(50);
@@ -99,16 +101,23 @@ const VerificationPage = () => {
         extractedText = await extractTextFromPDF(file);
       }
 
+      console.log('Extracted text length:', extractedText.length);
+      console.log('Extracted text preview:', extractedText.substring(0, 200));
+      
+      if (!extractedText.trim()) {
+        throw new Error('No text could be extracted from the document');
+      }
+
       setExtractedText(extractedText);
       setProcessingStep("Processing complete!");
       setProgress(100);
       
-      // Parse extracted text into form fields
-      parseExtractedText(extractedText);
+      // Parse extracted text into form fields using AI
+      await parseExtractedText(extractedText);
       
       toast({
         title: "Text Extraction Successful",
-        description: "Document text has been extracted and parsed.",
+        description: `Extracted ${extractedText.length} characters. AI parsing in progress...`,
       });
 
       // Switch to manual entry tab to review/edit
