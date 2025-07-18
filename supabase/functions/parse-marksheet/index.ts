@@ -59,37 +59,53 @@ Please extract and return ONLY a valid JSON object with the following structure:
 
 CRITICAL CBSE MARKSHEET PARSING RULES:
 
-1. CLASS IDENTIFICATION:
-   - Look for "SECONDARY" or "CLASS X" or "10th" = Class 10th/Xth
-   - Look for "SENIOR SECONDARY" or "CLASS XII" or "12th" = Class 12th/XIIth
+1. STUDENT IDENTIFICATION:
+   - Student name usually appears after "Name:" or "Student Name:" 
+   - AVOID picking mother's name, father's name, or school name as student name
+   - Roll number is typically smaller (6-8 digits), NOT the large school/centre codes
 
-2. ROLL NUMBER: Look for "ROLL NO", "SEAT NO" - avoid centre numbers (usually larger)
+2. CLASS IDENTIFICATION:
+   - Look for "SECONDARY SCHOOL EXAMINATION" = Class 10th/Xth
+   - Look for "SENIOR SECONDARY SCHOOL EXAMINATION" = Class 12th/XIIth
+   - Look for "CLASS X" or "CLASS 10" = Class 10th/Xth
+   - Look for "CLASS XII" or "CLASS 12" = Class 12th/XIIth
 
-3. CBSE TABLE STRUCTURE (typical columns left to right):
-   - Column 1: Subject name (MATHEMATICS, PHYSICS, CHEMISTRY, etc.)
-   - Column 2: Theory marks obtained
-   - Column 3: Practical marks obtained (shows "XXX" or similar if no practical)
-   - Column 4: Total marks obtained (theory + practical)
-   - Column 5: Total marks in words (ignore this, use column 4)
+3. MARKS TABLE STRUCTURE (CBSE format - columns from left to right):
+   - Subject Name (MATHEMATICS, PHYSICS, CHEMISTRY, ENGLISH, etc.)
+   - Theory Marks (numerical value or blank)
+   - Practical Marks (numerical value or "XXX" if no practical)
+   - Total Marks (theory + practical, this is the main score)
+   - Total in Words (ignore this column)
 
-4. MARKS EXTRACTION:
-   - Extract theory and practical marks separately
-   - If practical shows "XXX" or similar, treat as 0 practical marks
-   - Total for each subject = theory + practical marks
-   - Assume each subject is out of 100 marks total
-   - IGNORE subjects without actual marks like: WORK EXPERIENCE, PHYSICAL EDUCATION, PHY & HEALTH EDUCA, GENERAL STUDIES
+4. MARKS EXTRACTION RULES:
+   - Focus on the TOTAL MARKS column (4th column) for each subject
+   - If total marks column shows a number, use that as the subject total
+   - Theory marks = Total marks - Practical marks (if practical exists)
+   - If practical shows "XXX", "-", or similar, treat as 0 practical marks
+   - Each subject is typically out of 100 marks
+   - SKIP these subjects: WORK EXPERIENCE, PHYSICAL EDUCATION, PHY & HEALTH EDUCA, GENERAL STUDIES, ART EDUCATION (they often don't count toward percentage)
 
 5. PERCENTAGE CALCULATION:
-   - Only count subjects that have actual marks (not XXX or blank)
-   - Total obtained = sum of all valid subject totals
-   - Total possible = number of valid subjects × 100
-   - Percentage = (total obtained / total possible) × 100
+   - Only count subjects with actual numerical marks in the total column
+   - Sum all valid subject totals = total marks obtained
+   - Count number of valid subjects × 100 = total possible marks
+   - Percentage = (total obtained ÷ total possible) × 100
 
-6. SUBJECT FORMAT:
-   For each valid subject, format as: "SUBJECT_NAME: theory_marks + practical_marks = total_marks"
+6. SUBJECT FORMATTING:
+   Format as: "SUBJECT_NAME: theory_marks + practical_marks = total_marks"
    Example: "MATHEMATICS: 85 + 0 = 85\\nPHYSICS: 78 + 22 = 100"
 
-IMPORTANT: Only include subjects that have actual numerical marks. Skip subjects with no marks or marked as XXX.
+7. COMMON CBSE SUBJECTS TO RECOGNIZE:
+   - ENGLISH, HINDI, MATHEMATICS, PHYSICS, CHEMISTRY, BIOLOGY
+   - COMPUTER SCIENCE, PHYSICAL EDUCATION, ECONOMICS, POLITICAL SCIENCE
+   - BUSINESS STUDIES, ACCOUNTANCY, GEOGRAPHY, HISTORY
+
+EXTRACTION STRATEGY:
+1. Find student name near "Name:" label (NOT mother's/father's name)
+2. Find roll number (smaller number, usually 6-8 digits)
+3. Identify class level from examination title
+4. Locate marks table and extract total marks for each academic subject
+5. Calculate percentage using only academic subjects with marks
 
 Return ONLY the JSON object, no additional text.`;
     } else if (documentType === 'aadhar') {
