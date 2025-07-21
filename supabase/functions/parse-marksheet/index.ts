@@ -40,74 +40,69 @@ serve(async (req) => {
     let prompt = '';
     
     if (documentType === 'marksheet') {
-      prompt = `
-You are an AI that specializes in parsing CBSE and other Indian academic marksheets. Analyze the following extracted text from a marksheet and identify the key information. The text may contain OCR errors, so be intelligent about inferring the correct values.
+      prompt = `You are an expert at extracting data from Indian educational marksheets. Analyze the following text extracted from a marksheet and return a JSON object with the extracted information.
 
-EXTRACTED TEXT:
-${extractedText}
+CRITICAL TABLE STRUCTURE UNDERSTANDING:
+The marksheet contains a table with subjects and marks in this exact format:
+- Column 1: Subject name with code (e.g., "013 ENGLISH", "050 MATHEMATICS") 
+- Column 2: Total marks (usually 100 for theory, 50 for practical subjects)
+- Column 3: Marks obtained (numbers only)
+- Column 4: Marks obtained in words (ignore this for calculations)
 
-Please extract and return ONLY a valid JSON object with the following structure:
+SPECIFIC PARSING RULES:
+
+1. ROLL NUMBER EXTRACTION:
+   - Look for patterns like "B 283496" (letter followed by space and 6 digits)
+   - May be labeled as "Seat No." or similar
+   - NOT the large center/school codes
+
+2. STUDENT NAME EXTRACTION:
+   - Usually appears in ALL CAPS
+   - Full name format like "GEVARIYA ANSH ARVINDBHAI"
+   - Look for the longest name string in capitals
+
+3. SUBJECT AND MARKS EXTRACTION:
+   - Parse the table structure carefully
+   - Extract subject code and name from column 1
+   - Get total marks from column 2
+   - Get obtained marks from column 3 (ignore column 4 words)
+   - For practical subjects (those with "PRACT" in name):
+     * Combine with corresponding theory subject
+     * Theory (100) + Practical (50) = Combined total out of 150
+
+4. CALCULATION RULES:
+   - Calculate percentage based on actual marks structure
+   - Validate that marks make logical sense (0-100 for theory, 0-50 for practical)
+   - If marks seem incorrect, apply logical correction
+
+5. BOARD IDENTIFICATION:
+   - Look for "Gujarat" for Gujarat State Board
+   - Look for "CBSE", "ICSE", etc.
+
+6. CLASS IDENTIFICATION:
+   - "Higher Secondary" = 12th class
+   - "Secondary" = 10th class
+
+VALIDATION AND ERROR CORRECTION:
+- Check if extracted marks are realistic
+- Verify subject names make sense
+- Ensure roll number follows expected pattern
+- Correct obvious OCR errors logically
+- If percentage calculation seems wrong, recalculate
+
+Return ONLY a valid JSON object with these exact keys:
 {
-  "rollNumber": "student's roll number or seat number (not centre number)",
-  "studentName": "full student name",
-  "board": "board/university/school name",
-  "year": "year of examination (4 digits)",
-  "class": "10th/Xth or 12th/XIIth - identify the class level",
-  "subjects": "subject1: theory_marks + practical_marks = total_marks\\nsubject2: theory_marks + practical_marks = total_marks\\n...",
-  "percentage": "calculated percentage based on total marks obtained / total possible marks * 100"
+  "rollNumber": "extracted roll number (e.g., B 283496)",
+  "studentName": "full student name in proper case", 
+  "board": "board name",
+  "year": "examination year",
+  "class": "10th or 12th",
+  "subjects": "subject1: obtained/total\\nsubject2: obtained/total\\n...",
+  "percentage": "calculated percentage (2 decimal places)"
 }
 
-CRITICAL CBSE MARKSHEET PARSING RULES:
-
-1. STUDENT IDENTIFICATION:
-   - Student name usually appears after "Name:" or "Student Name:" 
-   - AVOID picking mother's name, father's name, or school name as student name
-   - Roll number is typically smaller (6-8 digits), NOT the large school/centre codes
-
-2. CLASS IDENTIFICATION:
-   - Look for "SECONDARY SCHOOL EXAMINATION" = Class 10th/Xth
-   - Look for "SENIOR SECONDARY SCHOOL EXAMINATION" = Class 12th/XIIth
-   - Look for "CLASS X" or "CLASS 10" = Class 10th/Xth
-   - Look for "CLASS XII" or "CLASS 12" = Class 12th/XIIth
-
-3. MARKS TABLE STRUCTURE (CBSE format - columns from left to right):
-   - Subject Name (MATHEMATICS, PHYSICS, CHEMISTRY, ENGLISH, etc.)
-   - Theory Marks (numerical value or blank)
-   - Practical Marks (numerical value or "XXX" if no practical)
-   - Total Marks (theory + practical, this is the main score)
-   - Total in Words (ignore this column)
-
-4. MARKS EXTRACTION RULES:
-   - Focus on the TOTAL MARKS column (4th column) for each subject
-   - If total marks column shows a number, use that as the subject total
-   - Theory marks = Total marks - Practical marks (if practical exists)
-   - If practical shows "XXX", "-", or similar, treat as 0 practical marks
-   - Each subject is typically out of 100 marks
-   - SKIP these subjects: WORK EXPERIENCE, PHYSICAL EDUCATION, PHY & HEALTH EDUCA, GENERAL STUDIES, ART EDUCATION (they often don't count toward percentage)
-
-5. PERCENTAGE CALCULATION:
-   - Only count subjects with actual numerical marks in the total column
-   - Sum all valid subject totals = total marks obtained
-   - Count number of valid subjects × 100 = total possible marks
-   - Percentage = (total obtained ÷ total possible) × 100
-
-6. SUBJECT FORMATTING:
-   Format as: "SUBJECT_NAME: theory_marks + practical_marks = total_marks"
-   Example: "MATHEMATICS: 85 + 0 = 85\\nPHYSICS: 78 + 22 = 100"
-
-7. COMMON CBSE SUBJECTS TO RECOGNIZE:
-   - ENGLISH, HINDI, MATHEMATICS, PHYSICS, CHEMISTRY, BIOLOGY
-   - COMPUTER SCIENCE, PHYSICAL EDUCATION, ECONOMICS, POLITICAL SCIENCE
-   - BUSINESS STUDIES, ACCOUNTANCY, GEOGRAPHY, HISTORY
-
-EXTRACTION STRATEGY:
-1. Find student name near "Name:" label (NOT mother's/father's name)
-2. Find roll number (smaller number, usually 6-8 digits)
-3. Identify class level from examination title
-4. Locate marks table and extract total marks for each academic subject
-5. Calculate percentage using only academic subjects with marks
-
-Return ONLY the JSON object, no additional text.`;
+EXTRACTED TEXT:
+${extractedText}`;
     } else if (documentType === 'aadhar') {
       prompt = `
 Analyze this Aadhar card text and extract key information:
