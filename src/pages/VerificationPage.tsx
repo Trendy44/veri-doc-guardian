@@ -137,9 +137,10 @@ const VerificationPage = () => {
   }, []);
 
   const parseExtractedText = async (text: string) => {
-    console.log("Using AI to parse extracted text:", text);
+    console.log("Parsing extracted text locally:", text);
     
     try {
+      // Try AI parsing first, fallback to local parsing
       const { data, error } = await supabase.functions.invoke('parse-marksheet', {
         body: {
           extractedText: text,
@@ -147,53 +148,166 @@ const VerificationPage = () => {
         }
       });
 
-      if (error) {
-        console.error('AI parsing error:', error);
+      if (!error && data && !data.error) {
+        console.log("AI parsed document data:", data);
+        
+        // Convert date format for HTML date inputs (DD/MM/YYYY -> YYYY-MM-DD)
+        const processedData = { ...data };
+        if (processedData.dateOfBirth && processedData.dateOfBirth.includes('/')) {
+          const [day, month, year] = processedData.dateOfBirth.split('/');
+          if (day && month && year && year.length === 4) {
+            processedData.dateOfBirth = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          }
+        }
+        
+        setDocumentData(processedData);
+        
         toast({
-          title: "Parsing Error",
-          description: "Failed to parse document with AI. Please fill the form manually.",
-          variant: "destructive",
+          title: "Document Parsed Successfully",
+          description: `Extracted: ${data?.studentName || 'Student'} - ${data?.class || 'Class'} - ${data?.percentage || '0'}% marks`,
         });
         return;
       }
+    } catch (error) {
+      console.log('AI parsing failed, using local parser:', error);
+    }
 
-      // Check if the response contains an error (API overloaded, etc.)
-      if (data?.error) {
-        console.error('Gemini API error:', data);
-        toast({
-          title: "AI Service Temporarily Unavailable",
-          description: data.details || "The AI service is currently overloaded. Please try again in a few moments.",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Fallback to local parsing
+    const localData = parseDocumentLocally(text, documentType!);
+    setDocumentData(localData);
+    
+    toast({
+      title: "Document Parsed",
+      description: "Text extracted and parsed locally. Please review the filled information.",
+    });
+  };
 
-      console.log("AI parsed document data:", data);
-      
-      // Convert date format for HTML date inputs (DD/MM/YYYY -> YYYY-MM-DD)
-      const processedData = { ...data };
-      if (processedData.dateOfBirth && processedData.dateOfBirth.includes('/')) {
-        const [day, month, year] = processedData.dateOfBirth.split('/');
-        if (day && month && year && year.length === 4) {
-          processedData.dateOfBirth = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  const parseDocumentLocally = (text: string, docType: string): DocumentData => {
+    const result: DocumentData = {};
+    const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+    
+    if (docType === 'marksheet') {
+      // Extract roll number (look for patterns like "Roll No:", "Roll Number:", or standalone digits)
+      const rollPattern = /(roll\s*(?:no|number)|seat\s*no)[\s:]+([A-Z0-9]+)/i;
+      const rollMatch = text.match(rollPattern);
+      if (rollMatch) {
+        result.rollNumber = rollMatch[2];
+      } else {
+        // Look for standalone numbers that could be roll numbers
+        const numberPattern = /\b\d{6,12}\b/g;
+        const numbers = text.match(numberPattern);
+        if (numbers) {
+          result.rollNumber = numbers[0]; // Take first reasonable number
         }
       }
+
+      // Extract student name (look for patterns like "Name:", "Student Name:")
+      const namePattern = /(?:student\s+)?name[\s:]+([A-Z\s]+)/i;
+      const nameMatch = text.match(namePattern);
+      if (nameMatch) {
+        result.studentName = nameMatch[1].trim();
+      }
+
+      // Extract board/university
+      const boardPattern = /(CBSE|ICSE|CISCE|Board|University|NCERT)/i;
+      const boardMatch = text.match(boardPattern);
+      if (boardMatch) {
+        result.board = boardMatch[0];
+      }
+
+      // Extract year (look for 4-digit years)
+      const yearPattern = /\b(20\d{2}|19\d{2})\b/g;
+      const years = text.match(yearPattern);
+      if (years) {
+        result.year = years[years.length - 1]; // Take the latest year
+      }
+
+      // Extract class (look for class indicators)
+      if (text.includes('SECONDARY') && !text.includes('SENIOR')) {
+        result.class = '10th';
+      } else if (text.includes('SENIOR SECONDARY')) {
+        result.class = '12th';
+      }
+
+      // Extract subjects and calculate percentage
+      const subjects: string[] = [];
+      let totalMarks = 0;
+      let subjectCount = 0;
+
+      // Common subjects to look for
+      const subjectNames = ['MATHEMATICS', 'PHYSICS', 'CHEMISTRY', 'ENGLISH', 'HINDI', 'BIOLOGY', 'COMPUTER'];
       
-      setDocumentData(processedData);
-      
-      toast({
-        title: "Document Parsed Successfully",
-        description: `Extracted: ${data?.studentName || 'Student'} - ${data?.class || 'Class'} - ${data?.percentage || '0'}% marks`,
+      subjectNames.forEach(subject => {
+        const subjectRegex = new RegExp(`${subject}[\\s\\S]*?(\\d{1,3})\\b`, 'i');
+        const match = text.match(subjectRegex);
+        if (match) {
+          const marks = parseInt(match[1]);
+          if (marks > 0 && marks <= 100) {
+            subjects.push(`${subject}: ${marks}`);
+            totalMarks += marks;
+            subjectCount++;
+          }
+        }
       });
-      
-    } catch (error) {
-      console.error('Error calling AI parser:', error);
-      toast({
-        title: "AI Parsing Failed",
-        description: "Please fill the form manually.",
-        variant: "destructive",
-      });
+
+      if (subjects.length > 0) {
+        result.subjects = subjects.join('\n');
+        result.percentage = ((totalMarks / (subjectCount * 100)) * 100).toFixed(2);
+      }
+
+    } else if (docType === 'aadhar') {
+      // Extract Aadhar number (12 digits)
+      const aadharPattern = /\b\d{4}\s*\d{4}\s*\d{4}\b|\b\d{12}\b/;
+      const aadharMatch = text.match(aadharPattern);
+      if (aadharMatch) {
+        result.aadharNumber = aadharMatch[0].replace(/\s/g, '');
+      }
+
+      // Extract name
+      const namePattern = /(?:name[\s:]+)?([A-Z][A-Z\s]{2,30})/i;
+      const nameMatch = text.match(namePattern);
+      if (nameMatch) {
+        result.name = nameMatch[1].trim();
+      }
+
+      // Extract date of birth
+      const dobPattern = /(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/;
+      const dobMatch = text.match(dobPattern);
+      if (dobMatch) {
+        result.dateOfBirth = dobMatch[1];
+      }
+
+    } else if (docType === 'pan') {
+      // Extract PAN number
+      const panPattern = /\b[A-Z]{5}\d{4}[A-Z]\b/;
+      const panMatch = text.match(panPattern);
+      if (panMatch) {
+        result.panNumber = panMatch[0];
+      }
+
+      // Extract name
+      const namePattern = /(?:name[\s:]+)?([A-Z][A-Z\s]{2,30})/i;
+      const nameMatch = text.match(namePattern);
+      if (nameMatch) {
+        result.name = nameMatch[1].trim();
+      }
+
+      // Extract father's name
+      const fatherPattern = /father['\s]*s?\s*name[\s:]+([A-Z\s]+)/i;
+      const fatherMatch = text.match(fatherPattern);
+      if (fatherMatch) {
+        result.fatherName = fatherMatch[1].trim();
+      }
+
+      // Extract date of birth
+      const dobPattern = /(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/;
+      const dobMatch = text.match(dobPattern);
+      if (dobMatch) {
+        result.dateOfBirth = dobMatch[1];
+      }
     }
+
+    return result;
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
