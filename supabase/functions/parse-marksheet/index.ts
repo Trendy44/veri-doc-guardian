@@ -40,68 +40,57 @@ serve(async (req) => {
     let prompt = '';
     
     if (documentType === 'marksheet') {
-      prompt = `You are an expert at extracting data from Indian educational marksheets. Analyze the following text extracted from a marksheet and return a JSON object with the extracted information.
+      prompt = `You are an expert at extracting data from Indian state board marksheets. Analyze the following text and extract information following the EXACT table structure.
 
-CRITICAL TABLE STRUCTURE UNDERSTANDING:
-The marksheet contains a table with subjects and marks in this exact format:
-- Column 1: Subject name with code (e.g., "013 ENGLISH", "050 MATHEMATICS") 
-- Column 2: Total marks (usually 100 for theory, 50 for practical subjects)
-- Column 3: Marks obtained (numbers only)
-- Column 4: Marks obtained in words (ignore this for calculations)
+CRITICAL: The marksheet has a table with these columns:
+1. Subject Name with Code (e.g., "013 ENGLISH", "050 MATHEMATICS")
+2. Total Marks (100 for theory, 50 for practical)  
+3. Marks Obtained (numerical value like 071, 093, 089)
+4. Marks in Words (ignore this column)
 
-SPECIFIC PARSING RULES:
+EXTRACTION EXAMPLES FROM YOUR FORMAT:
+- "013 ENGLISH (B.S.L.) 100 071" → English: 71/100
+- "050 MATHEMATICS 100 093" → Mathematics: 93/100  
+- "052 CHEMISTRY 100 089" → Chemistry: 89/100
+- "053 CHEMISTRY PRACT 050 046" → Chemistry Practical: 46/50
+- "054 PHYSICS 100 072" → Physics: 72/100
+- "055 PHYSICS PRACT 050 049" → Physics Practical: 49/50
+- "331 COMPUTER 100 085" → Computer: 85/100
+- "332 COMPUTER PRACT 050 047" → Computer Practical: 47/50
 
-1. ROLL NUMBER EXTRACTION:
-   - Look for patterns like "B 283496" (letter followed by space and 6 digits)
-   - May be labeled as "Seat No." or similar
-   - NOT the large center/school codes
+PARSING INSTRUCTIONS:
+1. ROLL NUMBER: Extract "B 283496" format (letter + space + 6 digits)
+2. STUDENT NAME: Extract "GEVARIYA ANSH ARVINDBHAI" (full name in caps)
+3. BOARD: Look for "Gujarat" → "Gujarat State Board"
+4. YEAR: Extract 2024 or similar
+5. CLASS: "Higher Secondary" = 12th
 
-2. STUDENT NAME EXTRACTION:
-   - Usually appears in ALL CAPS
-   - Full name format like "GEVARIYA ANSH ARVINDBHAI"
-   - Look for the longest name string in capitals
+6. SUBJECTS: Parse each table row:
+   - Find subject code (3 digits) + subject name
+   - Extract total marks (100 or 050)
+   - Extract obtained marks (2-3 digits)
+   - Format as "Subject: obtained/total"
 
-3. SUBJECT AND MARKS EXTRACTION:
-   - Parse the table structure carefully
-   - Extract subject code and name from column 1
-   - Get total marks from column 2
-   - Get obtained marks from column 3 (ignore column 4 words)
-   - For practical subjects (those with "PRACT" in name):
-     * Combine with corresponding theory subject
-     * Theory (100) + Practical (50) = Combined total out of 150
+7. PERCENTAGE CALCULATION:
+   - Add all obtained marks
+   - Add all total marks  
+   - Calculate: (total_obtained / total_possible) × 100
 
-4. CALCULATION RULES:
-   - Calculate percentage based on actual marks structure
-   - Validate that marks make logical sense (0-100 for theory, 0-50 for practical)
-   - If marks seem incorrect, apply logical correction
+EXAMPLE OUTPUT for the marks you provided:
+"subjects": "English: 71/100\\nMathematics: 93/100\\nChemistry: 89/100\\nChemistry Practical: 46/50\\nPhysics: 72/100\\nPhysics Practical: 49/50\\nComputer: 85/100\\nComputer Practical: 47/50"
 
-5. BOARD IDENTIFICATION:
-   - Look for "Gujarat" for Gujarat State Board
-   - Look for "CBSE", "ICSE", etc.
-
-6. CLASS IDENTIFICATION:
-   - "Higher Secondary" = 12th class
-   - "Secondary" = 10th class
-
-VALIDATION AND ERROR CORRECTION:
-- Check if extracted marks are realistic
-- Verify subject names make sense
-- Ensure roll number follows expected pattern
-- Correct obvious OCR errors logically
-- If percentage calculation seems wrong, recalculate
-
-Return ONLY a valid JSON object with these exact keys:
+Return ONLY valid JSON:
 {
-  "rollNumber": "extracted roll number (e.g., B 283496)",
-  "studentName": "full student name in proper case", 
-  "board": "board name",
-  "year": "examination year",
-  "class": "10th or 12th",
-  "subjects": "subject1: obtained/total\\nsubject2: obtained/total\\n...",
-  "percentage": "calculated percentage (2 decimal places)"
+  "rollNumber": "B 283496",
+  "studentName": "GEVARIYA ANSH ARVINDBHAI", 
+  "board": "Gujarat State Board",
+  "year": "2024",
+  "class": "12th",
+  "subjects": "English: 71/100\\nMathematics: 93/100\\nChemistry: 89/100\\nChemistry Practical: 46/50\\nPhysics: 72/100\\nPhysics Practical: 49/50\\nComputer: 85/100\\nComputer Practical: 47/50",
+  "percentage": "82.40"
 }
 
-EXTRACTED TEXT:
+TEXT TO PARSE:
 ${extractedText}`;
     } else if (documentType === 'aadhar') {
       prompt = `
