@@ -187,32 +187,40 @@ const VerificationPage = () => {
     const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
     
     if (docType === 'marksheet') {
-      // Extract roll number (look for patterns like "Roll No:", "Roll Number:", or standalone digits)
-      const rollPattern = /(roll\s*(?:no|number)|seat\s*no)[\s:]+([A-Z0-9]+)/i;
+      // Extract roll number for state board marksheets (like "B 283496")
+      const rollPattern = /\b([A-Z]\s*\d{6})\b/;
       const rollMatch = text.match(rollPattern);
       if (rollMatch) {
-        result.rollNumber = rollMatch[2];
+        result.rollNumber = rollMatch[1].replace(/\s+/g, ' ');
       } else {
-        // Look for standalone numbers that could be roll numbers
-        const numberPattern = /\b\d{6,12}\b/g;
-        const numbers = text.match(numberPattern);
-        if (numbers) {
-          result.rollNumber = numbers[0]; // Take first reasonable number
+        // Fallback to other patterns
+        const fallbackPattern = /(roll\s*(?:no|number)|seat\s*no)[\s:]+([A-Z0-9\s]+)/i;
+        const fallbackMatch = text.match(fallbackPattern);
+        if (fallbackMatch) {
+          result.rollNumber = fallbackMatch[2].trim();
         }
       }
 
-      // Extract student name (look for patterns like "Name:", "Student Name:")
-      const namePattern = /(?:student\s+)?name[\s:]+([A-Z\s]+)/i;
-      const nameMatch = text.match(namePattern);
-      if (nameMatch) {
-        result.studentName = nameMatch[1].trim();
+      // Extract student name - look for full name in caps
+      const namePattern = /([A-Z]+\s+[A-Z]+\s+[A-Z]+)/;
+      const nameMatches = text.match(namePattern);
+      if (nameMatches) {
+        // Find the longest name match (likely the student's full name)
+        const longestName = nameMatches[0];
+        if (longestName.length > 10) { // Filter out short matches
+          result.studentName = longestName.trim();
+        }
       }
 
-      // Extract board/university
-      const boardPattern = /(CBSE|ICSE|CISCE|Board|University|NCERT)/i;
-      const boardMatch = text.match(boardPattern);
-      if (boardMatch) {
-        result.board = boardMatch[0];
+      // Extract board/university (Gujarat Board)
+      if (text.includes('Gujarat')) {
+        result.board = 'Gujarat State Board';
+      } else {
+        const boardPattern = /(CBSE|ICSE|CISCE|Board|University|NCERT)/i;
+        const boardMatch = text.match(boardPattern);
+        if (boardMatch) {
+          result.board = boardMatch[0];
+        }
       }
 
       // Extract year (look for 4-digit years)
@@ -223,36 +231,89 @@ const VerificationPage = () => {
       }
 
       // Extract class (look for class indicators)
-      if (text.includes('SECONDARY') && !text.includes('SENIOR')) {
-        result.class = '10th';
-      } else if (text.includes('SENIOR SECONDARY')) {
+      if (text.includes('Higher Secondary')) {
         result.class = '12th';
+      } else if (text.includes('SECONDARY') && !text.includes('HIGHER')) {
+        result.class = '10th';
       }
 
-      // Extract subjects and calculate percentage
+      // Extract subjects and marks from table structure
       const subjects: string[] = [];
-      let totalMarks = 0;
-      let subjectCount = 0;
+      let totalObtained = 0;
+      let totalMaxMarks = 0;
 
-      // Common subjects to look for
-      const subjectNames = ['MATHEMATICS', 'PHYSICS', 'CHEMISTRY', 'ENGLISH', 'HINDI', 'BIOLOGY', 'COMPUTER'];
-      
-      subjectNames.forEach(subject => {
-        const subjectRegex = new RegExp(`${subject}[\\s\\S]*?(\\d{1,3})\\b`, 'i');
-        const match = text.match(subjectRegex);
-        if (match) {
-          const marks = parseInt(match[1]);
-          if (marks > 0 && marks <= 100) {
-            subjects.push(`${subject}: ${marks}`);
-            totalMarks += marks;
-            subjectCount++;
+      // Look for subject table pattern - extract subjects with their marks
+      const subjectLines = text.split('\n').filter(line => {
+        // Look for lines that contain subject codes and marks
+        return /\d{3}\s+[A-Z]+.*\d{3}.*\d{2,3}/.test(line) || 
+               /[A-Z]+.*\d{3}.*\d{2,3}/.test(line);
+      });
+
+      subjectLines.forEach(line => {
+        // Parse each subject line
+        const parts = line.split(/\s+/).filter(part => part.trim());
+        let subjectName = '';
+        let maxMarks = 0;
+        let obtainedMarks = 0;
+
+        // Find subject name (first word with letters)
+        for (let i = 0; i < parts.length; i++) {
+          if (/^[A-Z]+$/.test(parts[i]) && parts[i].length > 2) {
+            subjectName = parts[i];
+            break;
+          }
+        }
+
+        // Find marks (look for 3-digit numbers for max marks, 2-3 digit for obtained)
+        const numbers = parts.filter(part => /^\d{2,3}$/.test(part)).map(num => parseInt(num));
+        if (numbers.length >= 2) {
+          maxMarks = numbers[0]; // First number is usually max marks
+          obtainedMarks = numbers[1]; // Second number is obtained marks
+          
+          if (subjectName && maxMarks > 0 && obtainedMarks >= 0) {
+            // Check if this is a practical subject
+            if (line.includes('PRACT')) {
+              // Find corresponding theory subject and combine
+              const theorySubject = subjects.find(s => s.includes(subjectName) && !s.includes('PRACT'));
+              if (theorySubject) {
+                // Update theory subject to include practical marks
+                const theoryIndex = subjects.indexOf(theorySubject);
+                const theoryMarks = parseInt(theorySubject.split(': ')[1]);
+                subjects[theoryIndex] = `${subjectName}: ${theoryMarks + obtainedMarks}/150`;
+                totalObtained += obtainedMarks;
+                totalMaxMarks += maxMarks;
+              } else {
+                subjects.push(`${subjectName} PRACT: ${obtainedMarks}/${maxMarks}`);
+                totalObtained += obtainedMarks;
+                totalMaxMarks += maxMarks;
+              }
+            } else {
+              subjects.push(`${subjectName}: ${obtainedMarks}/${maxMarks}`);
+              totalObtained += obtainedMarks;
+              totalMaxMarks += maxMarks;
+            }
           }
         }
       });
 
+      // If no subjects found through table parsing, try simple extraction
+      if (subjects.length === 0) {
+        const commonSubjects = ['ENGLISH', 'MATHEMATICS', 'PHYSICS', 'CHEMISTRY', 'COMPUTER'];
+        commonSubjects.forEach(subject => {
+          const regex = new RegExp(`${subject}.*?(\\d{2,3})`, 'i');
+          const match = text.match(regex);
+          if (match) {
+            const marks = parseInt(match[1]);
+            subjects.push(`${subject}: ${marks}/100`);
+            totalObtained += marks;
+            totalMaxMarks += 100;
+          }
+        });
+      }
+
       if (subjects.length > 0) {
         result.subjects = subjects.join('\n');
-        result.percentage = ((totalMarks / (subjectCount * 100)) * 100).toFixed(2);
+        result.percentage = ((totalObtained / totalMaxMarks) * 100).toFixed(2);
       }
 
     } else if (docType === 'aadhar') {
