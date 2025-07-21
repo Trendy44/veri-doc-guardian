@@ -124,73 +124,12 @@ export const verifyDocument = async (documentType: string, documentData: Documen
   return performMockVerification(documentType, documentData);
 };
 
-// Real API verification with separate endpoints for each document type
+// Real API verification (placeholder for actual implementation)
 const verifyWithRealAPI = async (documentType: string, documentData: DocumentData, apiKey: string): Promise<VerificationResult> => {
-  const apiKeys = getStoredApiKeys();
-  let apiUrl = '';
-  let apiKeyToUse = '';
-
-  // Select appropriate API based on document type
-  switch (documentType) {
-    case 'aadhar':
-      apiUrl = apiKeys.aadharVerificationUrl;
-      apiKeyToUse = apiKeys.aadharApiKey;
-      break;
-    case 'pan': 
-      apiUrl = apiKeys.panVerificationUrl;
-      apiKeyToUse = apiKeys.panApiKey;
-      break;
-    case 'marksheet':
-      // Check if it's class 10th or 12th based on documentData.class
-      const isClass10 = documentData.class?.toLowerCase().includes('10') || documentData.class?.toLowerCase().includes('x');
-      if (isClass10) {
-        apiUrl = apiKeys.class10VerificationUrl;
-        apiKeyToUse = apiKeys.class10ApiKey;
-      } else {
-        apiUrl = apiKeys.class12VerificationUrl; 
-        apiKeyToUse = apiKeys.class12ApiKey;
-      }
-      break;
-    default:
-      throw new Error(`Unsupported document type: ${documentType}`);
-  }
-
-  if (!apiUrl || !apiKeyToUse) {
-    throw new Error(`API configuration missing for ${documentType} verification`);
-  }
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKeyToUse}`,
-        // Add other headers as required by your APIs
-      },
-      body: JSON.stringify({
-        documentType,
-        ...documentData
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    
-    // Adapt the response format to match our VerificationResult interface
-    return {
-      isValid: result.isValid || result.status === 'verified' || result.success,
-      message: result.message || result.description || 'Verification completed',
-      details: result.details || result.errors || [],
-      confidence: result.confidence || result.score || (result.isValid ? 95 : 0)
-    };
-
-  } catch (error) {
-    console.error(`${documentType} verification API error:`, error);
-    throw error;
-  }
+  // This is where you'd integrate with actual verification APIs
+  // For example, NSDL for Aadhar, Income Tax Dept for PAN, etc.
+  
+  throw new Error("Real API integration not implemented yet - add your verification API endpoint here");
 };
 
 // Mock verification for testing and demonstration
@@ -358,34 +297,9 @@ const fileToBase64 = (file: File): Promise<string> => {
 const getStoredApiKeys = () => {
   try {
     const keys = localStorage.getItem("veridoc-api-keys");
-    return keys ? JSON.parse(keys) : { 
-      gemini: "", 
-      verification: "", 
-      backup: "",
-      // Document verification APIs
-      aadharVerificationUrl: "",
-      aadharApiKey: "",
-      panVerificationUrl: "",
-      panApiKey: "",
-      class10VerificationUrl: "",
-      class10ApiKey: "",
-      class12VerificationUrl: "",
-      class12ApiKey: ""
-    };
+    return keys ? JSON.parse(keys) : { gemini: "", verification: "", backup: "" };
   } catch (error) {
     console.error("Error loading API keys:", error);
-    return { 
-      gemini: "", 
-      verification: "", 
-      backup: "",
-      aadharVerificationUrl: "",
-      aadharApiKey: "",
-      panVerificationUrl: "",
-      panApiKey: "",
-      class10VerificationUrl: "",
-      class10ApiKey: "",
-      class12VerificationUrl: "",
-      class12ApiKey: ""
-    };
+    return { gemini: "", verification: "", backup: "" };
   }
 };

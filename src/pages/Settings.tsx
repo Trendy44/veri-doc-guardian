@@ -15,30 +15,13 @@ const Settings = () => {
   const [apiKeys, setApiKeys] = useState({
     gemini: "",
     verification: "",
-    backup: "",
-    // Document verification APIs
-    aadharVerificationUrl: "",
-    aadharApiKey: "",
-    panVerificationUrl: "",
-    panApiKey: "",
-    class10VerificationUrl: "",
-    class10ApiKey: "",
-    class12VerificationUrl: "",
-    class12ApiKey: ""
+    backup: ""
   });
   
   const [showKeys, setShowKeys] = useState({
     gemini: false,
     verification: false,
-    backup: false,
-    aadharVerificationUrl: false,
-    aadharApiKey: false,
-    panVerificationUrl: false,
-    panApiKey: false,
-    class10VerificationUrl: false,
-    class10ApiKey: false,
-    class12VerificationUrl: false,
-    class12ApiKey: false
+    backup: false
   });
 
   // Load saved API keys from localStorage
@@ -78,20 +61,7 @@ const Settings = () => {
   };
 
   const clearAllKeys = () => {
-    const emptyKeys = {
-      gemini: "",
-      verification: "",
-      backup: "",
-      aadharVerificationUrl: "",
-      aadharApiKey: "",
-      panVerificationUrl: "",
-      panApiKey: "",
-      class10VerificationUrl: "",
-      class10ApiKey: "",
-      class12VerificationUrl: "",
-      class12ApiKey: ""
-    };
-    setApiKeys(emptyKeys);
+    setApiKeys({ gemini: "", verification: "", backup: "" });
     localStorage.removeItem("veridoc-api-keys");
     toast({
       title: "Settings Cleared",
@@ -107,65 +77,19 @@ const Settings = () => {
       placeholder: "AIzaSy...",
       helpText: "Get your API key from Google AI Studio (https://makersuite.google.com/app/apikey)"
     },
-    // Aadhar Verification API
     {
-      key: "aadharVerificationUrl",
-      title: "Aadhar Verification API URL",
-      description: "API endpoint for Aadhar card verification",
-      placeholder: "https://api.example.com/verify/aadhar",
-      helpText: "Enter the complete URL for your Aadhar verification API endpoint"
+      key: "verification",
+      title: "Document Verification API",
+      description: "API key for document verification services (Aadhar, PAN, etc.)",
+      placeholder: "veri_api_...",
+      helpText: "Contact your verification service provider for this API key"
     },
     {
-      key: "aadharApiKey", 
-      title: "Aadhar Verification API Key",
-      description: "API key for Aadhar verification service",
-      placeholder: "aadhar_api_key...",
-      helpText: "API key provided by your Aadhar verification service provider"
-    },
-    // PAN Verification API
-    {
-      key: "panVerificationUrl",
-      title: "PAN Verification API URL", 
-      description: "API endpoint for PAN card verification",
-      placeholder: "https://api.example.com/verify/pan",
-      helpText: "Enter the complete URL for your PAN verification API endpoint"
-    },
-    {
-      key: "panApiKey",
-      title: "PAN Verification API Key",
-      description: "API key for PAN verification service", 
-      placeholder: "pan_api_key...",
-      helpText: "API key provided by your PAN verification service provider"
-    },
-    // Class 10th Marksheet API
-    {
-      key: "class10VerificationUrl",
-      title: "Class 10th Marksheet API URL",
-      description: "API endpoint for Class 10th marksheet verification",
-      placeholder: "https://api.example.com/verify/class10",
-      helpText: "Enter the complete URL for your Class 10th marksheet verification API"
-    },
-    {
-      key: "class10ApiKey",
-      title: "Class 10th Marksheet API Key", 
-      description: "API key for Class 10th marksheet verification",
-      placeholder: "class10_api_key...",
-      helpText: "API key for your Class 10th marksheet verification service"
-    },
-    // Class 12th Marksheet API
-    {
-      key: "class12VerificationUrl",
-      title: "Class 12th Marksheet API URL",
-      description: "API endpoint for Class 12th marksheet verification", 
-      placeholder: "https://api.example.com/verify/class12",
-      helpText: "Enter the complete URL for your Class 12th marksheet verification API"
-    },
-    {
-      key: "class12ApiKey", 
-      title: "Class 12th Marksheet API Key",
-      description: "API key for Class 12th marksheet verification",
-      placeholder: "class12_api_key...",
-      helpText: "API key for your Class 12th marksheet verification service"
+      key: "backup",
+      title: "Backup Verification API",
+      description: "Fallback API key for secondary verification service",
+      placeholder: "backup_...",
+      helpText: "Optional: Secondary API for backup verification when primary service is unavailable"
     }
   ];
 
@@ -225,9 +149,7 @@ const Settings = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor={config.key}>
-                    {config.key.includes('Url') ? 'API Endpoint URL' : 'API Key'}
-                  </Label>
+                  <Label htmlFor={config.key}>API Key</Label>
                   <div className="relative">
                     <Input
                       id={config.key}
@@ -299,26 +221,15 @@ const Settings = () => {
             <div>
               <h4 className="font-medium mb-2">2. Document Verification APIs</h4>
               <ul className="text-sm text-muted-foreground space-y-1 ml-4">
-                <li>• <strong>Aadhar Verification:</strong> Enter your Aadhar verification API URL and key</li>
-                <li>• <strong>PAN Verification:</strong> Configure separate PAN verification API endpoint</li>
-                <li>• <strong>Class 10th Marksheet:</strong> Set up API for secondary school certificate verification</li>
-                <li>• <strong>Class 12th Marksheet:</strong> Configure API for higher secondary certificate verification</li>
-                <li>• Each document type uses its own dedicated API for accurate verification</li>
-                <li>• The system automatically detects marksheet class (10th/12th) and uses appropriate API</li>
+                <li>• For Indian documents: Consider APIs from vendors like NSDL, KARZA, or IDfy</li>
+                <li>• Each service provides different verification capabilities</li>
+                <li>• Test keys often available for development and testing</li>
+                <li>• Contact the service provider for production API access</li>
               </ul>
             </div>
             
             <div>
-              <h4 className="font-medium mb-2">3. API Response Format</h4>
-              <ul className="text-sm text-muted-foreground space-y-1 ml-4">
-                <li>• APIs should return JSON with: isValid, message, details[], confidence</li>
-                <li>• Example: {`{"isValid": true, "message": "Document verified", "confidence": 95}`}</li>
-                <li>• The system will automatically handle different response formats</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h4 className="font-medium mb-2">4. Testing Without Real APIs</h4>
+              <h4 className="font-medium mb-2">3. Testing Without Real APIs</h4>
               <ul className="text-sm text-muted-foreground space-y-1 ml-4">
                 <li>• The app includes mock verification responses for testing</li>
                 <li>• OCR will work with any image upload (no API key needed for basic extraction)</li>
