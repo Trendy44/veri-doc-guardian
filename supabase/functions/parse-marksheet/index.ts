@@ -124,18 +124,41 @@ Return ONLY a valid JSON object:
 }`;
     } else if (documentType === 'pan') {
       prompt = `
-Analyze this PAN card text and extract key information:
+Analyze this PAN card text and extract key information. Pay special attention to date formats and PAN card structure.
 
 EXTRACTED TEXT:
 ${extractedText}
 
 Return ONLY a valid JSON object:
 {
-  "panNumber": "10-character PAN number",
+  "panNumber": "10-character PAN number (format: ABCDE1234F)",
   "name": "person's name", 
   "fatherName": "father's name if visible",
-  "dateOfBirth": "date of birth if visible"
-}`;
+  "dateOfBirth": "date of birth in DD/MM/YYYY format if visible"
+}
+
+PAN CARD PARSING RULES:
+
+1. PAN NUMBER: Look for 10-character alphanumeric code (5 letters + 4 digits + 1 letter)
+   - Format: ABCDE1234F
+   - Usually prominently displayed
+
+2. NAME: Look for the cardholder's name
+   - Usually appears as the main name on the card
+   - Avoid picking father's name as the main name
+
+3. FATHER'S NAME: Look for text after "Father's Name" or similar labels
+
+4. DATE OF BIRTH: 
+   - Look for dates in DD/MM/YYYY format (like 31/10/1992)
+   - May also appear as DD-MM-YYYY or DD.MM.YYYY
+   - Could be labeled as "Date of Birth", "DOB", or just appear as a date
+   - Convert any date format to DD/MM/YYYY format
+   - Look carefully through all the text for date patterns
+
+IMPORTANT: Pay special attention to extracting the date of birth correctly. Look for any date pattern that could represent a birth date.
+
+Return ONLY the JSON object, no additional text.`;
     }
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {

@@ -169,7 +169,17 @@ const VerificationPage = () => {
       }
 
       console.log("AI parsed document data:", data);
-      setDocumentData(data);
+      
+      // Convert date format for HTML date inputs (DD/MM/YYYY -> YYYY-MM-DD)
+      const processedData = { ...data };
+      if (processedData.dateOfBirth && processedData.dateOfBirth.includes('/')) {
+        const [day, month, year] = processedData.dateOfBirth.split('/');
+        if (day && month && year && year.length === 4) {
+          processedData.dateOfBirth = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+      }
+      
+      setDocumentData(processedData);
       
       toast({
         title: "Document Parsed Successfully",
