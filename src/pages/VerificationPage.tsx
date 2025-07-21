@@ -150,8 +150,8 @@ const VerificationPage = () => {
       if (error) {
         console.error('AI parsing error:', error);
         toast({
-          title: "Parsing Error",
-          description: "Failed to parse document with AI. Please fill the form manually.",
+          title: "AI Parsing Failed",
+          description: "The extracted text is available below for manual entry.",
           variant: "destructive",
         });
         return;
@@ -162,7 +162,7 @@ const VerificationPage = () => {
         console.error('Gemini API error:', data);
         toast({
           title: "AI Service Temporarily Unavailable",
-          description: data.details || "The AI service is currently overloaded. Please try again in a few moments.",
+          description: "The extracted text is available below for manual entry.",
           variant: "destructive",
         });
         return;
@@ -190,7 +190,7 @@ const VerificationPage = () => {
       console.error('Error calling AI parser:', error);
       toast({
         title: "AI Parsing Failed",
-        description: "Please fill the form manually.",
+        description: "The extracted text is available below for manual entry.",
         variant: "destructive",
       });
     }
@@ -430,6 +430,25 @@ const VerificationPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Show extracted text for manual reference when AI parsing fails */}
+                {extractedText && (
+                  <div className="p-4 bg-muted rounded-lg border">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Extracted Text (for reference)
+                    </Label>
+                    <Textarea
+                      value={extractedText}
+                      readOnly
+                      className="mt-2 min-h-[120px] text-sm font-mono"
+                      placeholder="Extracted text will appear here..."
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Copy relevant information from above to fill the form fields below
+                    </p>
+                  </div>
+                )}
+
                 {currentConfig.fields.map((field) => (
                   <div key={field.key} className="space-y-2">
                     <Label htmlFor={field.key}>{field.label}</Label>
