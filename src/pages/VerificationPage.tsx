@@ -149,10 +149,12 @@ const VerificationPage = () => {
 
       if (error) {
         console.error('AI parsing error:', error);
+        // Fallback to local parsing
+        const localData = parseTextLocally(text, documentType);
+        setDocumentData(localData);
         toast({
-          title: "AI Parsing Failed",
-          description: "The extracted text is available below for manual entry.",
-          variant: "destructive",
+          title: "Using Local Parser",
+          description: "AI parsing failed, using local text extraction.",
         });
         return;
       }
@@ -160,10 +162,12 @@ const VerificationPage = () => {
       // Check if the response contains an error (API overloaded, etc.)
       if (data?.error) {
         console.error('Gemini API error:', data);
+        // Fallback to local parsing
+        const localData = parseTextLocally(text, documentType);
+        setDocumentData(localData);
         toast({
-          title: "AI Service Temporarily Unavailable",
-          description: "The extracted text is available below for manual entry.",
-          variant: "destructive",
+          title: "Using Local Parser", 
+          description: "AI service unavailable, using local text extraction.",
         });
         return;
       }
@@ -188,12 +192,148 @@ const VerificationPage = () => {
       
     } catch (error) {
       console.error('Error calling AI parser:', error);
+      // Fallback to local parsing
+      const localData = parseTextLocally(text, documentType);
+      setDocumentData(localData);
       toast({
-        title: "AI Parsing Failed",
-        description: "The extracted text is available below for manual entry.",
-        variant: "destructive",
+        title: "Using Local Parser",
+        description: "AI parsing failed, using local text extraction.",
       });
     }
+  };
+
+  const parseTextLocally = (text: string, docType: string) => {
+    if (docType === 'marksheet') {
+      return parseMarksheetLocally(text);
+    } else if (docType === 'aadhar') {
+      return parseAadharLocally(text);
+    } else if (docType === 'pan') {
+      return parsePanLocally(text);
+    }
+    return {};
+  };
+
+  const parseMarksheetLocally = (text: string) => {
+    const data: any = {};
+    
+    // Extract student name (look for common patterns)
+    const nameMatch = text.match(/(?:Name|Student Name|STUDENT NAME)[:\s]*([A-Z\s]+)(?:\n|$)/i);
+    if (nameMatch) {
+      data.studentName = nameMatch[1].trim();
+    }
+
+    // Extract roll number (6-8 digit numbers, not large centre codes)
+    const rollMatches = text.match(/\b\d{6,8}\b/g);
+    if (rollMatches) {
+      data.rollNumber = rollMatches.find(num => num.length >= 6 && num.length <= 8) || rollMatches[0];
+    }
+
+    // Extract board name
+    const boardMatch = text.match(/(Gujarat|CBSE|ICSE|Board|Secondary|Higher Secondary)[^.\n]*(?:Board|Education)/i);
+    if (boardMatch) {
+      data.board = boardMatch[0].trim();
+    }
+
+    // Extract year
+    const yearMatch = text.match(/\b(20\d{2})\b/);
+    if (yearMatch) {
+      data.year = yearMatch[1];
+    }
+
+    // Extract class level
+    if (text.includes('SENIOR SECONDARY') || text.includes('XII') || text.includes('12')) {
+      data.class = '12th/XIIth';
+    } else if (text.includes('SECONDARY') || text.includes('X') || text.includes('10')) {
+      data.class = '10th/Xth';
+    }
+
+    // Extract subjects and marks (simple pattern matching)
+    const subjectLines = text.split('\n').filter(line => 
+      /\b(ENGLISH|MATHEMATICS|PHYSICS|CHEMISTRY|COMPUTER|BIOLOGY|HINDI)\b/i.test(line) &&
+      /\d{1,3}/.test(line)
+    );
+
+    const subjects = [];
+    let totalMarks = 0;
+    let subjectCount = 0;
+
+    for (const line of subjectLines) {
+      const subjectMatch = line.match(/(ENGLISH|MATHEMATICS|PHYSICS|CHEMISTRY|COMPUTER|BIOLOGY|HINDI)/i);
+      const marksMatch = line.match(/\b(\d{1,3})\b/g);
+      
+      if (subjectMatch && marksMatch) {
+        const subject = subjectMatch[1];
+        const marks = marksMatch.filter(m => parseInt(m) <= 100).map(m => parseInt(m));
+        
+        if (marks.length > 0) {
+          const total = Math.max(...marks); // Take the highest mark as total
+          subjects.push(`${subject}: ${total} + 0 = ${total}`);
+          totalMarks += total;
+          subjectCount++;
+        }
+      }
+    }
+
+    if (subjects.length > 0) {
+      data.subjects = subjects.join('\n');
+      data.percentage = ((totalMarks / (subjectCount * 100)) * 100).toFixed(2);
+    }
+
+    return data;
+  };
+
+  const parseAadharLocally = (text: string) => {
+    const data: any = {};
+    
+    // Extract Aadhar number (12 digits)
+    const aadharMatch = text.match(/\b\d{4}\s*\d{4}\s*\d{4}\b|\b\d{12}\b/);
+    if (aadharMatch) {
+      data.aadharNumber = aadharMatch[0].replace(/\s/g, '');
+    }
+
+    // Extract name (usually appears after common patterns)
+    const nameMatch = text.match(/(?:Name|नाम)[:\s]*([A-Za-z\s]+)/i);
+    if (nameMatch) {
+      data.name = nameMatch[1].trim();
+    }
+
+    // Extract date of birth
+    const dobMatch = text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
+    if (dobMatch) {
+      data.dateOfBirth = `${dobMatch[3]}-${dobMatch[2].padStart(2, '0')}-${dobMatch[1].padStart(2, '0')}`;
+    }
+
+    return data;
+  };
+
+  const parsePanLocally = (text: string) => {
+    const data: any = {};
+    
+    // Extract PAN number (10 characters: 5 letters + 4 digits + 1 letter)
+    const panMatch = text.match(/\b[A-Z]{5}\d{4}[A-Z]\b/);
+    if (panMatch) {
+      data.panNumber = panMatch[0];
+    }
+
+    // Extract name
+    const nameMatch = text.match(/(?:Name|नाम)[:\s]*([A-Za-z\s]+)/i);
+    if (nameMatch) {
+      data.name = nameMatch[1].trim();
+    }
+
+    // Extract father's name
+    const fatherMatch = text.match(/(?:Father|पिता)[:\s]*([A-Za-z\s]+)/i);
+    if (fatherMatch) {
+      data.fatherName = fatherMatch[1].trim();
+    }
+
+    // Extract date of birth
+    const dobMatch = text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
+    if (dobMatch) {
+      data.dateOfBirth = `${dobMatch[1].padStart(2, '0')}/${dobMatch[2].padStart(2, '0')}/${dobMatch[3]}`;
+    }
+
+    return data;
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
