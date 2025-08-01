@@ -197,25 +197,60 @@ const VerificationPage = () => {
         console.log('Found roll number:', result.rollNumber);
       }
 
-      // Extract student name - look for pattern after specific markers
-      const namePattern = /([A-Z]{2,}\s+[A-Z]{2,}\s+[A-Z]{2,})/g;
-      const nameMatches = text.match(namePattern);
-      if (nameMatches) {
-        // Find the longest and most likely student name
-        const possibleNames = nameMatches.filter(name => 
-          name.length > 15 && 
-          !name.includes('GUJARAT') && 
-          !name.includes('BOARD') &&
-          !name.includes('SECONDARY')
+      // Extract student name with improved pattern recognition
+      const nameLines = lines.filter(line => {
+        const upperLine = line.toUpperCase();
+        return (
+          line.length > 10 && 
+          line.length < 50 &&
+          /^[A-Z\s]+$/.test(upperLine) &&
+          !upperLine.includes('GUJARAT') && 
+          !upperLine.includes('BOARD') &&
+          !upperLine.includes('SECONDARY') &&
+          !upperLine.includes('HIGHER') &&
+          !upperLine.includes('EXAMINATION') &&
+          !upperLine.includes('CERTIFICATE') &&
+          !upperLine.includes('RESULT') &&
+          !upperLine.includes('PRACTICAL') &&
+          !upperLine.includes('THEORY') &&
+          !upperLine.includes('ENGLISH') &&
+          !upperLine.includes('MATHEMATICS') &&
+          !upperLine.includes('PHYSICS') &&
+          !upperLine.includes('CHEMISTRY') &&
+          !upperLine.includes('COMPUTER') &&
+          !/^\d/.test(line) && // Doesn't start with a number
+          upperLine.split(' ').length >= 2 && // At least 2 words
+          upperLine.split(' ').length <= 4    // At most 4 words
         );
-        if (possibleNames.length > 0) {
-          result.studentName = possibleNames[0].trim();
-          console.log('Found student name:', result.studentName);
-        }
+      });
+      
+      if (nameLines.length > 0) {
+        // Pick the name that appears in the first part of the document
+        const firstHalf = lines.slice(0, Math.floor(lines.length / 2));
+        const nameInFirstHalf = nameLines.find(name => firstHalf.includes(name));
+        result.studentName = (nameInFirstHalf || nameLines[0]).trim();
+        console.log('Found student name:', result.studentName);
       }
 
-      // Extract board
-      if (text.includes('Gujarat')) {
+      // Extract board with multiple pattern recognition
+      const boardPatterns = [
+        /Gujarat\s+State\s+(?:Board|Examination)/i,
+        /Gujarat.*Board/i,
+        /GSEB/i,
+        /State\s+Board.*Gujarat/i
+      ];
+      
+      for (const pattern of boardPatterns) {
+        const boardMatch = text.match(pattern);
+        if (boardMatch) {
+          result.board = 'Gujarat State Board of School Textbooks (GSEB)';
+          console.log('Found board:', result.board);
+          break;
+        }
+      }
+      
+      // If no specific board found but Gujarat is mentioned
+      if (!result.board && text.toLowerCase().includes('gujarat')) {
         result.board = 'Gujarat State Board';
       }
 
