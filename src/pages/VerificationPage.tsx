@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromImage, extractTextFromPDF, verifyDocument } from "@/lib/verification";
-import { supabase } from "@/integrations/supabase/client";
+
 
 interface DocumentData {
   [key: string]: string;
@@ -138,47 +138,23 @@ const VerificationPage = () => {
 
   const parseExtractedText = async (text: string) => {
     console.log("Parsing extracted text locally:", text);
-    
-    try {
-      // Try AI parsing first, fallback to local parsing
-      const { data, error } = await supabase.functions.invoke('parse-marksheet', {
-        body: {
-          extractedText: text,
-          documentType: documentType
-        }
-      });
 
-      if (!error && data && !data.error) {
-        console.log("AI parsed document data:", data);
-        
-        // Convert date format for HTML date inputs (DD/MM/YYYY -> YYYY-MM-DD)
-        const processedData = { ...data };
-        if (processedData.dateOfBirth && processedData.dateOfBirth.includes('/')) {
-          const [day, month, year] = processedData.dateOfBirth.split('/');
-          if (day && month && year && year.length === 4) {
-            processedData.dateOfBirth = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-          }
-        }
-        
-        setDocumentData(processedData);
-        
-        toast({
-          title: "Document Parsed Successfully",
-          description: `Extracted: ${data?.studentName || 'Student'} - ${data?.class || 'Class'} - ${data?.percentage || '0'}% marks`,
-        });
-        return;
+    // Parse locally only (offline mode)
+    const localData = parseDocumentLocally(text, documentType!);
+
+    // Normalize date format for HTML date inputs (DD/MM/YYYY -> YYYY-MM-DD)
+    if ((localData as any).dateOfBirth && (localData as any).dateOfBirth.includes('/')) {
+      const [day, month, year] = (localData as any).dateOfBirth.split('/');
+      if (day && month && year && year.length === 4) {
+        (localData as any).dateOfBirth = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
       }
-    } catch (error) {
-      console.log('AI parsing failed, using local parser:', error);
     }
 
-    // Fallback to local parsing
-    const localData = parseDocumentLocally(text, documentType!);
     setDocumentData(localData);
-    
+
     toast({
       title: "Document Parsed",
-      description: "Text extracted and parsed locally. Please review the filled information.",
+      description: "Parsed locally. Please review the fields.",
     });
   };
 
