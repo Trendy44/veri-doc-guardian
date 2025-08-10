@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { 
@@ -42,6 +42,22 @@ const VerificationPage = () => {
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("upload");
 
+  // Simple in-app Proof Code state (local-only)
+  const [lastFileHash, setLastFileHash] = useState<string | null>(null);
+  const [proofCode, setProofCode] = useState<string | null>(null);
+  type ProofCodeEntry = { code: string; docType: string; createdAt: string };
+  const [savedCodes, setSavedCodes] = useState<ProofCodeEntry[]>([]);
+  const [checkCodeInput, setCheckCodeInput] = useState<string>("");
+  const [checkStatus, setCheckStatus] = useState<"idle" | "match" | "not_found" | "matches_current">("idle");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("proofCodes");
+      if (raw) setSavedCodes(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+
   const documentConfig = {
     aadhar: {
       title: "Aadhar Card Verification",
@@ -82,6 +98,10 @@ const VerificationPage = () => {
     if (!file) return;
 
     setUploadedFile(file);
+    try {
+      const hash = await computeFileHash(file);
+      setLastFileHash(hash);
+    } catch {}
     setIsProcessing(true);
     setProcessingStep("Uploading file...");
     setProgress(20);
@@ -368,6 +388,91 @@ const VerificationPage = () => {
   };
 
 
+  // Helper functions for simple, local proof code
+  function toBase64Url(buffer: ArrayBuffer): string {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+    return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function stableStringify(value: any): string {
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(",")}]`;
+    const keys = Object.keys(value).sort();
+    const entries = keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`);
+    return `{${entries.join(",")}}`;
+  }
+
+  async function sha256Base64UrlFromString(str: string): Promise<string> {
+    const enc = new TextEncoder();
+    const data = enc.encode(str);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return toBase64Url(digest);
+  }
+
+  async function computeFileHash(file: File): Promise<string> {
+    const buf = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return toBase64Url(digest);
+  }
+
+  function saveCodesToStorage(codes: ProofCodeEntry[]) {
+    try { localStorage.setItem("proofCodes", JSON.stringify(codes)); } catch {}
+  }
+
+  async function handleGenerateProof() {
+    if (!documentData || Object.keys(documentData).length === 0) {
+      toast({ title: "Missing Information", description: "Fill in document details first.", variant: "destructive" });
+      return;
+    }
+    const payload = `${documentType}|${stableStringify(documentData)}|${lastFileHash || ""}`;
+    const code = await sha256Base64UrlFromString(payload);
+    setProofCode(code);
+    const entry: ProofCodeEntry = { code, docType: documentType!, createdAt: new Date().toISOString() };
+    const updated = [entry, ...savedCodes]
+      .filter((v, i, arr) => arr.findIndex((x) => x.code === v.code) === i)
+      .slice(0, 20);
+    setSavedCodes(updated);
+    saveCodesToStorage(updated);
+    toast({ title: "Proof code ready", description: "You can copy or check this code anytime." });
+  }
+
+  async function handleCopyProof() {
+    if (!proofCode) return;
+    try { await navigator.clipboard?.writeText(proofCode); } catch {}
+    toast({ title: "Copied", description: "Proof code copied to clipboard." });
+  }
+
+  async function handleCheckCode() {
+    const input = checkCodeInput.trim();
+    if (!input) {
+      toast({ title: "Enter a code", description: "Paste a code to check.", variant: "destructive" });
+      return;
+    }
+    if (savedCodes.some((c) => c.code === input)) {
+      setCheckStatus("match");
+      toast({ title: "Code found", description: "This code is saved on this device." });
+      return;
+    }
+    const payload = `${documentType}|${stableStringify(documentData)}|${lastFileHash || ""}`;
+    const expected = await sha256Base64UrlFromString(payload);
+    if (expected === input) {
+      setCheckStatus("matches_current");
+      toast({ title: "Matches current data", description: "Code matches the current document details." });
+    } else {
+      setCheckStatus("not_found");
+      toast({ title: "Not found here", description: "Code not saved locally or matching current data." });
+    }
+  }
+
+  function removeSavedCode(code: string) {
+    const updated = savedCodes.filter((c) => c.code !== code);
+    setSavedCodes(updated);
+    saveCodesToStorage(updated);
+  }
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
@@ -650,6 +755,71 @@ const VerificationPage = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {Object.keys(documentData).length > 0 && (
+          <Card className="mt-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Proof Code (simple, local)
+              </CardTitle>
+              <CardDescription>
+                Generate a code you can copy. It's saved locally on this device for quick checks.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" onClick={handleGenerateProof} disabled={isProcessing}>
+                  Generate Proof Code
+                </Button>
+                {proofCode && (
+                  <Button variant="outline" onClick={handleCopyProof}>Copy Code</Button>
+                )}
+              </div>
+
+              {proofCode && (
+                <div className="bg-muted rounded p-3 text-sm font-mono break-all border">
+                  {proofCode}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="check-code">Check a code</Label>
+                <div className="flex gap-2">
+                  <Input id="check-code" placeholder="Paste code to check" value={checkCodeInput} onChange={(e) => setCheckCodeInput(e.target.value)} />
+                  <Button variant="outline" onClick={handleCheckCode}>Check</Button>
+                </div>
+                {checkStatus !== "idle" && (
+                  <p className="text-sm text-muted-foreground">
+                    {checkStatus === "match" && "Code found in your saved list on this device."}
+                    {checkStatus === "matches_current" && "Code matches the current document details here."}
+                    {checkStatus === "not_found" && "Code not found locally or matching current data."}
+                  </p>
+                )}
+              </div>
+
+              {savedCodes.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Saved codes</Label>
+                  <div className="space-y-2">
+                    {savedCodes.slice(0, 5).map((c) => (
+                      <div key={c.code} className="flex items-center justify-between border rounded p-2 bg-background">
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground">{c.docType} • {new Date(c.createdAt).toLocaleString()}</p>
+                          <p className="font-mono text-sm break-all">{c.code}</p>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <Button size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(c.code)}>Copy</Button>
+                          <Button size="sm" variant="ghost" onClick={() => removeSavedCode(c.code)}>Remove</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Security Notice */}
         <Card className="mt-6 border-warning/50 bg-warning/5">
