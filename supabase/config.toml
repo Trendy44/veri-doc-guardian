@@ -1,1 +1,4 @@
 project_id = "ockpmuwjxfjunxcpfwcl"
+
+[functions.anchor-hash]
+verify_jwt = false

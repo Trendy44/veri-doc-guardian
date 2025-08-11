@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromImage, extractTextFromPDF, verifyDocument } from "@/lib/verification";
+import { supabase } from "@/integrations/supabase/client";
 
 
 interface DocumentData {
@@ -41,6 +42,9 @@ const VerificationPage = () => {
   const [progress, setProgress] = useState(0);
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("upload");
+  const [isAnchoring, setIsAnchoring] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
 
   // Simple in-app Proof Code state (local-only)
   const [lastFileHash, setLastFileHash] = useState<string | null>(null);
@@ -473,6 +477,30 @@ const VerificationPage = () => {
     saveCodesToStorage(updated);
   }
 
+  async function handleAnchorOnChain() {
+    if (!proofCode) {
+      toast({ title: "No proof code", description: "Generate a proof code first.", variant: "destructive" });
+      return;
+    }
+    setIsAnchoring(true);
+    setTxHash(null);
+    setExplorerUrl(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('anchor-hash', {
+        body: { proofCode }
+      });
+      if (error) throw error;
+      setTxHash(data.txHash);
+      setExplorerUrl(data.explorerUrl);
+      toast({ title: "Anchored on-chain", description: "Transaction submitted on Polygon Amoy." });
+    } catch (err: any) {
+      console.error("Anchor error:", err);
+      toast({ title: "Anchoring failed", description: err?.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setIsAnchoring(false);
+    }
+  }
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
@@ -768,18 +796,37 @@ const VerificationPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button variant="secondary" onClick={handleGenerateProof} disabled={isProcessing}>
                   Generate Proof Code
                 </Button>
                 {proofCode && (
-                  <Button variant="outline" onClick={handleCopyProof}>Copy Code</Button>
+                  <>
+                    <Button variant="outline" onClick={handleCopyProof}>Copy Code</Button>
+                    <Button variant="hero" onClick={handleAnchorOnChain} disabled={isAnchoring}>
+                      {isAnchoring ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Anchoring...
+                        </>
+                      ) : (
+                        <>Anchor on Blockchain</>
+                      )}
+                    </Button>
+                  </>
                 )}
               </div>
 
               {proofCode && (
                 <div className="bg-muted rounded p-3 text-sm font-mono break-all border">
                   {proofCode}
+                </div>
+              )}
+
+              {txHash && explorerUrl && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground">Anchored on Polygon Amoy:</p>
+                  <a className="underline" href={explorerUrl} target="_blank" rel="noreferrer">{txHash}</a>
                 </div>
               )}
 
